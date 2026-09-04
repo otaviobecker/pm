@@ -7,7 +7,8 @@ from fastapi.testclient import TestClient
 import pytest
 
 from app import ai, db
-from app.main import app, failed_login_attempts, login_lockouts, sessions
+from app.auth import failed_login_attempts, login_lockouts, sessions
+from app.main import app
 
 
 @pytest.fixture

@@ -5,6 +5,8 @@ The backend is a Python 3.14 FastAPI application managed with `uv`.
 ## Structure
 
 - `app/main.py` creates the FastAPI application, defines `/api` routes, and mounts static files at `/`.
+- `app/auth.py` owns the session store, login lockout tracking, cookie settings, and the `current_user` dependency.
+- `app/middleware.py` owns cross-cutting ASGI middleware (currently the request body size limit).
 - `app/db.py` owns SQLite initialization, seed data, queries, and transactional board mutations.
 - `app/ai.py` owns OpenRouter requests and structured-output parsing.
 - `app/models.py` contains shared Pydantic API and AI models.
