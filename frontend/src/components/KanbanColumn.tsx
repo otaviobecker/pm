@@ -8,8 +8,9 @@ import { NewCardForm } from "@/components/NewCardForm";
 type KanbanColumnProps = {
   column: Column;
   cards: Card[];
-  onRename: (columnId: string, title: string) => void;
+  onRename: (columnId: string, title: string) => Promise<void>;
   onAddCard: (columnId: string, title: string, details: string) => void;
+  onEditCard: (cardId: string, title: string, details: string) => void;
   onDeleteCard: (columnId: string, cardId: string) => void;
 };
 
@@ -18,9 +19,19 @@ export const KanbanColumn = ({
   cards,
   onRename,
   onAddCard,
+  onEditCard,
   onDeleteCard,
 }: KanbanColumnProps) => {
   const { setNodeRef, isOver } = useDroppable({ id: column.id });
+
+  const saveTitle = async (input: HTMLInputElement) => {
+    const nextTitle = input.value.trim();
+    if (!nextTitle) {
+      input.value = column.title;
+    } else if (nextTitle !== column.title) {
+      await onRename(column.id, nextTitle);
+    }
+  };
 
   return (
     <section
@@ -40,8 +51,13 @@ export const KanbanColumn = ({
             </span>
           </div>
           <input
-            value={column.title}
-            onChange={(event) => onRename(column.id, event.target.value)}
+            defaultValue={column.title}
+            onBlur={(event) => void saveTitle(event.currentTarget)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.currentTarget.blur();
+              }
+            }}
             className="mt-3 w-full bg-transparent font-display text-lg font-semibold text-[var(--navy-dark)] outline-none"
             aria-label="Column title"
           />
@@ -53,6 +69,7 @@ export const KanbanColumn = ({
             <KanbanCard
               key={card.id}
               card={card}
+              onEdit={onEditCard}
               onDelete={(cardId) => onDeleteCard(column.id, cardId)}
             />
           ))}

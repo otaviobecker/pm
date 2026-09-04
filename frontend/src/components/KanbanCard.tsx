@@ -1,3 +1,4 @@
+import { useState, type FormEvent } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import clsx from "clsx";
@@ -5,16 +6,36 @@ import type { Card } from "@/lib/kanban";
 
 type KanbanCardProps = {
   card: Card;
+  onEdit: (cardId: string, title: string, details: string) => void;
   onDelete: (cardId: string) => void;
 };
 
-export const KanbanCard = ({ card, onDelete }: KanbanCardProps) => {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id: card.id });
+export const KanbanCard = ({ card, onEdit, onDelete }: KanbanCardProps) => {
+  const [editing, setEditing] = useState(false);
+  const [title, setTitle] = useState(card.title);
+  const [details, setDetails] = useState(card.details);
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    setActivatorNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: card.id });
 
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
+  };
+
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!title.trim()) {
+      return;
+    }
+    onEdit(card.id, title.trim(), details.trim());
+    setEditing(false);
   };
 
   return (
@@ -26,28 +47,84 @@ export const KanbanCard = ({ card, onDelete }: KanbanCardProps) => {
         "transition-all duration-150",
         isDragging && "opacity-60 shadow-[0_18px_32px_rgba(3,33,71,0.16)]"
       )}
-      {...attributes}
-      {...listeners}
       data-testid={`card-${card.id}`}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h4 className="font-display text-base font-semibold text-[var(--navy-dark)]">
-            {card.title}
-          </h4>
-          <p className="mt-2 text-sm leading-6 text-[var(--gray-text)]">
-            {card.details}
-          </p>
+      {editing ? (
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <input
+            aria-label="Card title"
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            className="w-full rounded-xl border border-[var(--stroke)] px-3 py-2 text-sm font-semibold outline-none focus:border-[var(--primary-blue)]"
+            required
+          />
+          <textarea
+            aria-label="Card details"
+            value={details}
+            onChange={(event) => setDetails(event.target.value)}
+            rows={3}
+            className="w-full resize-none rounded-xl border border-[var(--stroke)] px-3 py-2 text-sm outline-none focus:border-[var(--primary-blue)]"
+          />
+          <div className="flex gap-2">
+            <button
+              type="submit"
+              className="rounded-full bg-[var(--secondary-purple)] px-3 py-1.5 text-xs font-semibold text-white"
+            >
+              Save
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setTitle(card.title);
+                setDetails(card.details);
+                setEditing(false);
+              }}
+              className="rounded-full border border-[var(--stroke)] px-3 py-1.5 text-xs font-semibold"
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      ) : (
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h4 className="font-display text-base font-semibold text-[var(--navy-dark)]">
+              {card.title}
+            </h4>
+            <p className="mt-2 text-sm leading-6 text-[var(--gray-text)]">
+              {card.details}
+            </p>
+          </div>
+          <div className="flex flex-col items-end gap-1">
+            <button
+              ref={setActivatorNodeRef}
+              type="button"
+              className="cursor-grab rounded-full px-2 py-1 text-xs font-semibold text-[var(--primary-blue)] active:cursor-grabbing"
+              aria-label={`Drag ${card.title}`}
+              {...attributes}
+              {...listeners}
+            >
+              Drag
+            </button>
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              className="rounded-full px-2 py-1 text-xs font-semibold text-[var(--gray-text)] hover:text-[var(--navy-dark)]"
+              aria-label={`Edit ${card.title}`}
+            >
+              Edit
+            </button>
+            <button
+              type="button"
+              onClick={() => onDelete(card.id)}
+              className="rounded-full border border-transparent px-2 py-1 text-xs font-semibold text-[var(--gray-text)] transition hover:border-[var(--stroke)] hover:text-[var(--navy-dark)]"
+              aria-label={`Delete ${card.title}`}
+            >
+              Remove
+            </button>
+          </div>
         </div>
-        <button
-          type="button"
-          onClick={() => onDelete(card.id)}
-          className="rounded-full border border-transparent px-2 py-1 text-xs font-semibold text-[var(--gray-text)] transition hover:border-[var(--stroke)] hover:text-[var(--navy-dark)]"
-          aria-label={`Delete ${card.title}`}
-        >
-          Remove
-        </button>
-      </div>
+      )}
     </article>
   );
 };

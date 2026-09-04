@@ -1,0 +1,285 @@
+{
+  "schema_version": 1,
+  "database": {
+    "engine": "SQLite",
+    "file": "/app/data/pm.db",
+    "pragmas": {
+      "foreign_keys": "ON",
+      "journal_mode": "WAL",
+      "busy_timeout_ms": 5000,
+      "user_version": 1
+    }
+  },
+  "tables": {
+    "users": {
+      "purpose": "Owns one Kanban board per application user.",
+      "columns": {
+        "id": {
+          "type": "INTEGER",
+          "primary_key": true,
+          "auto_increment": true
+        },
+        "username": {
+          "type": "TEXT",
+          "nullable": false
+        },
+        "created_at": {
+          "type": "TEXT",
+          "nullable": false,
+          "format": "UTC ISO 8601"
+        }
+      },
+      "constraints": [
+        {
+          "type": "unique",
+          "columns": ["username"]
+        },
+        {
+          "type": "check",
+          "expression": "length(trim(username)) > 0"
+        }
+      ]
+    },
+    "boards": {
+      "purpose": "Stores the single board owned by a user.",
+      "columns": {
+        "id": {
+          "type": "INTEGER",
+          "primary_key": true,
+          "auto_increment": true
+        },
+        "user_id": {
+          "type": "INTEGER",
+          "nullable": false
+        },
+        "title": {
+          "type": "TEXT",
+          "nullable": false,
+          "default": "Kanban Studio"
+        },
+        "created_at": {
+          "type": "TEXT",
+          "nullable": false,
+          "format": "UTC ISO 8601"
+        },
+        "updated_at": {
+          "type": "TEXT",
+          "nullable": false,
+          "format": "UTC ISO 8601"
+        }
+      },
+      "constraints": [
+        {
+          "type": "foreign_key",
+          "columns": ["user_id"],
+          "references": {
+            "table": "users",
+            "columns": ["id"]
+          },
+          "on_delete": "CASCADE"
+        },
+        {
+          "type": "unique",
+          "columns": ["user_id"],
+          "reason": "Enforces one board per user."
+        },
+        {
+          "type": "check",
+          "expression": "length(trim(title)) > 0"
+        }
+      ]
+    },
+    "columns": {
+      "purpose": "Stores the five fixed workflow stages. The key and position are immutable; only title may be changed.",
+      "columns": {
+        "id": {
+          "type": "TEXT",
+          "nullable": false,
+          "format": "col-{key}"
+        },
+        "board_id": {
+          "type": "INTEGER",
+          "nullable": false
+        },
+        "key": {
+          "type": "TEXT",
+          "nullable": false,
+          "allowed_values": [
+            "backlog",
+            "discovery",
+            "progress",
+            "review",
+            "done"
+          ]
+        },
+        "title": {
+          "type": "TEXT",
+          "nullable": false
+        },
+        "position": {
+          "type": "INTEGER",
+          "nullable": false,
+          "minimum": 0,
+          "maximum": 4
+        }
+      },
+      "constraints": [
+        {
+          "type": "primary_key",
+          "columns": ["board_id", "id"]
+        },
+        {
+          "type": "foreign_key",
+          "columns": ["board_id"],
+          "references": {
+            "table": "boards",
+            "columns": ["id"]
+          },
+          "on_delete": "CASCADE"
+        },
+        {
+          "type": "check",
+          "expression": "key IN ('backlog', 'discovery', 'progress', 'review', 'done')"
+        },
+        {
+          "type": "check",
+          "expression": "position BETWEEN 0 AND 4"
+        },
+        {
+          "type": "check",
+          "expression": "length(trim(title)) > 0"
+        },
+        {
+          "type": "unique",
+          "columns": ["board_id", "key"]
+        },
+        {
+          "type": "unique",
+          "columns": ["board_id", "position"]
+        }
+      ]
+    },
+    "cards": {
+      "purpose": "Stores ordered cards within a board column.",
+      "columns": {
+        "id": {
+          "type": "TEXT",
+          "primary_key": true,
+          "format": "card-{random}"
+        },
+        "board_id": {
+          "type": "INTEGER",
+          "nullable": false
+        },
+        "column_id": {
+          "type": "TEXT",
+          "nullable": false
+        },
+        "title": {
+          "type": "TEXT",
+          "nullable": false
+        },
+        "details": {
+          "type": "TEXT",
+          "nullable": false,
+          "default": ""
+        },
+        "position": {
+          "type": "INTEGER",
+          "nullable": false,
+          "minimum": 0
+        },
+        "created_at": {
+          "type": "TEXT",
+          "nullable": false,
+          "format": "UTC ISO 8601"
+        },
+        "updated_at": {
+          "type": "TEXT",
+          "nullable": false,
+          "format": "UTC ISO 8601"
+        }
+      },
+      "constraints": [
+        {
+          "type": "foreign_key",
+          "columns": ["board_id", "column_id"],
+          "references": {
+            "table": "columns",
+            "columns": ["board_id", "id"]
+          },
+          "on_delete": "CASCADE",
+          "reason": "Prevents a card from referencing a column on another board."
+        },
+        {
+          "type": "check",
+          "expression": "length(trim(title)) > 0"
+        },
+        {
+          "type": "check",
+          "expression": "position >= 0"
+        },
+        {
+          "type": "unique",
+          "columns": ["board_id", "column_id", "position"]
+        }
+      ],
+      "indexes": [
+        {
+          "columns": ["board_id", "column_id", "position"],
+          "purpose": "Loads cards in display order."
+        }
+      ]
+    }
+  },
+  "application_invariants": [
+    "Board creation inserts all five column keys and positions in the same transaction.",
+    "Column creation, deletion, key changes, and position changes are not exposed by the API.",
+    "Column titles may be renamed but may not be blank.",
+    "Card positions are contiguous and zero-based within each column.",
+    "Card create, delete, reorder, and cross-column move operations rewrite affected positions in one transaction.",
+    "Every board query is scoped through the authenticated user's id.",
+    "Chat messages are never stored in SQLite."
+  ],
+  "frontend_board_mapping": {
+    "BoardData.columns": "columns ordered by columns.position",
+    "BoardData.columns[].cardIds": "cards grouped by column_id and ordered by cards.position",
+    "BoardData.cards": "cards keyed by cards.id"
+  },
+  "example_board_payload": {
+    "columns": [
+      {
+        "id": "col-backlog",
+        "title": "Backlog",
+        "cardIds": ["card-example"]
+      },
+      {
+        "id": "col-discovery",
+        "title": "Discovery",
+        "cardIds": []
+      },
+      {
+        "id": "col-progress",
+        "title": "In Progress",
+        "cardIds": []
+      },
+      {
+        "id": "col-review",
+        "title": "Review",
+        "cardIds": []
+      },
+      {
+        "id": "col-done",
+        "title": "Done",
+        "cardIds": []
+      }
+    ],
+    "cards": {
+      "card-example": {
+        "id": "card-example",
+        "title": "Example card",
+        "details": "Stored in the cards table at position 0."
+      }
+    }
+  }
+}
