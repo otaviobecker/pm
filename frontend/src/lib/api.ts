@@ -14,6 +14,27 @@ export type ChatResponse = {
   board: BoardData | null;
 };
 
+export class ApiError extends Error {
+  status: number;
+  detail?: string;
+
+  constructor(status: number, detail?: string) {
+    super(detail ?? (status === 401 ? "Unauthorized" : "Request failed"));
+    this.status = status;
+    this.detail = detail;
+  }
+}
+
+const errorDetail = async (response: Response): Promise<string | undefined> => {
+  try {
+    const body: unknown = await response.json();
+    const detail = (body as { detail?: unknown } | null)?.detail;
+    return typeof detail === "string" ? detail : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
 const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
   const response = await fetch(path, {
     ...init,
@@ -24,7 +45,7 @@ const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
   });
 
   if (!response.ok) {
-    throw new Error(response.status === 401 ? "Unauthorized" : "Request failed");
+    throw new ApiError(response.status, await errorDetail(response));
   }
 
   return response.status === 204 ? (undefined as T) : response.json();
@@ -34,7 +55,7 @@ export const getSession = async (): Promise<User | null> => {
   try {
     return await request<User>("/api/auth/session");
   } catch (error) {
-    if (error instanceof Error && error.message === "Unauthorized") {
+    if (error instanceof ApiError && error.status === 401) {
       return null;
     }
     throw error;

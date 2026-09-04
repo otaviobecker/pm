@@ -2,6 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { KanbanBoard } from "@/components/KanbanBoard";
 import {
+  ApiError,
   createCard,
   deleteCard,
   editCard,
@@ -10,15 +11,19 @@ import {
 } from "@/lib/api";
 import { initialData } from "@/lib/kanban";
 
-vi.mock("@/lib/api", () => ({
-  createCard: vi.fn(),
-  deleteCard: vi.fn(),
-  editCard: vi.fn(),
-  getBoard: vi.fn(),
-  moveBoardCard: vi.fn(),
-  renameColumn: vi.fn(),
-  sendChat: vi.fn(),
-}));
+vi.mock("@/lib/api", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/api")>("@/lib/api");
+  return {
+    ...actual,
+    createCard: vi.fn(),
+    deleteCard: vi.fn(),
+    editCard: vi.fn(),
+    getBoard: vi.fn(),
+    moveBoardCard: vi.fn(),
+    renameColumn: vi.fn(),
+    sendChat: vi.fn(),
+  };
+});
 
 const mockedCreateCard = vi.mocked(createCard);
 const mockedDeleteCard = vi.mocked(deleteCard);
@@ -66,6 +71,22 @@ describe("KanbanBoard", () => {
 
     expect(await screen.findByRole("alert")).toBeInTheDocument();
     expect(input).toHaveValue(initialData.columns[0].title);
+  });
+
+  it("shows the server's validation detail when a rename is rejected", async () => {
+    mockedRenameColumn.mockRejectedValue(
+      new ApiError(422, "title must not be blank")
+    );
+    render(<KanbanBoard />);
+    const column = (await screen.findAllByTestId(/column-/i))[0];
+    const input = within(column).getByLabelText("Column title");
+    await userEvent.clear(input);
+    await userEvent.type(input, "New Name");
+    await userEvent.tab();
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "title must not be blank"
+    );
   });
 
   it("adds and removes a card", async () => {

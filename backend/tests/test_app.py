@@ -1,18 +1,21 @@
 from collections.abc import Iterator
 import json
 import os
+import threading
 
 from fastapi.testclient import TestClient
 import pytest
 
 from app import ai, db
-from app.main import app, sessions
+from app.main import app, failed_login_attempts, login_lockouts, sessions
 
 
 @pytest.fixture
 def client(tmp_path, monkeypatch) -> Iterator[TestClient]:
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
     sessions.clear()
+    failed_login_attempts.clear()
+    login_lockouts.clear()
     with TestClient(app) as test_client:
         yield test_client
 
@@ -69,6 +72,62 @@ def test_login_rejects_invalid_credentials(client: TestClient) -> None:
 
     assert response.status_code == 401
     assert response.json() == {"detail": "Invalid username or password"}
+
+
+def test_login_locks_out_after_repeated_failures(client: TestClient) -> None:
+    for _ in range(5):
+        response = client.post(
+            "/api/auth/login",
+            json={"username": "user", "password": "wrong"},
+        )
+        assert response.status_code == 401
+
+    locked_out = client.post(
+        "/api/auth/login",
+        json={"username": "user", "password": "password"},
+    )
+
+    assert locked_out.status_code == 429
+
+
+def test_login_cookie_is_not_secure_by_default(client: TestClient) -> None:
+    response = client.post(
+        "/api/auth/login",
+        json={"username": "user", "password": "password"},
+    )
+
+    cookie = response.headers["set-cookie"].lower()
+    assert "secure" not in cookie
+
+
+def test_login_cookie_is_secure_when_configured(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("COOKIE_SECURE", "true")
+
+    response = client.post(
+        "/api/auth/login",
+        json={"username": "user", "password": "password"},
+    )
+
+    cookie = response.headers["set-cookie"].lower()
+    assert "secure" in cookie
+
+
+def test_oversized_request_body_is_rejected(client: TestClient) -> None:
+    login(client)
+
+    response = client.post(
+        "/api/board/cards",
+        json={
+            "columnId": "col-backlog",
+            "title": "x",
+            "details": "y" * 3_100_000,
+        },
+    )
+
+    assert response.status_code == 413
 
 
 def test_session_requires_authentication(client: TestClient) -> None:
@@ -145,6 +204,17 @@ def test_blank_column_title_is_rejected(client: TestClient) -> None:
     assert board["columns"][0]["title"] == "Backlog"
 
 
+def test_column_title_length_limit_is_enforced(client: TestClient) -> None:
+    login(client)
+
+    response = client.patch(
+        "/api/board/columns/col-backlog",
+        json={"title": "x" * 101},
+    )
+
+    assert response.status_code == 422
+
+
 def test_create_edit_and_delete_card(client: TestClient) -> None:
     login(client)
 
@@ -184,6 +254,51 @@ def test_blank_card_title_is_rejected(client: TestClient) -> None:
         json={"title": "   ", "details": ""},
     )
     assert edited.status_code == 422
+
+
+def test_card_title_and_details_length_limits_are_enforced(client: TestClient) -> None:
+    login(client)
+
+    oversized_title = client.post(
+        "/api/board/cards",
+        json={"columnId": "col-backlog", "title": "x" * 201, "details": ""},
+    )
+    assert oversized_title.status_code == 422
+
+    oversized_details = client.post(
+        "/api/board/cards",
+        json={
+            "columnId": "col-backlog",
+            "title": "Valid title",
+            "details": "x" * 5001,
+        },
+    )
+    assert oversized_details.status_code == 422
+
+
+def test_concurrent_card_creation_does_not_corrupt_positions(client: TestClient) -> None:
+    login(client)
+    errors: list[BaseException] = []
+    thread_count = 6
+    barrier = threading.Barrier(thread_count)
+
+    def create(index: int) -> None:
+        try:
+            barrier.wait()
+            db.create_card("user", "col-backlog", f"Concurrent {index}", "")
+        except BaseException as exception:  # noqa: BLE001
+            errors.append(exception)
+
+    threads = [threading.Thread(target=create, args=(i,)) for i in range(thread_count)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert not errors, errors
+    board = db.get_board("user")
+    backlog_ids = board["columns"][0]["cardIds"]
+    assert len(backlog_ids) == len(set(backlog_ids)) == 2 + thread_count
 
 
 def test_reorders_and_moves_cards(client: TestClient) -> None:

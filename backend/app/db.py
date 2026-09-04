@@ -63,9 +63,6 @@ CREATE TABLE cards (
     FOREIGN KEY (board_id, column_id) REFERENCES columns(board_id, id) ON DELETE CASCADE,
     UNIQUE (board_id, column_id, position)
 );
-
-CREATE INDEX cards_board_column_position
-ON cards(board_id, column_id, position);
 """
 
 
@@ -80,7 +77,7 @@ def database_path() -> Path:
 def connect() -> sqlite3.Connection:
     path = database_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    connection = sqlite3.connect(path)
+    connection = sqlite3.connect(path, isolation_level=None)
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA foreign_keys = ON")
     connection.execute("PRAGMA busy_timeout = 5000")
@@ -92,6 +89,7 @@ def connect() -> sqlite3.Connection:
 def transaction() -> Iterator[sqlite3.Connection]:
     connection = connect()
     try:
+        connection.execute("BEGIN IMMEDIATE")
         yield connection
         connection.commit()
     except Exception:
@@ -106,6 +104,7 @@ def initialize_database() -> None:
         version = connection.execute("PRAGMA user_version").fetchone()[0]
         if version == 0:
             connection.executescript(SCHEMA)
+            connection.execute("BEGIN IMMEDIATE")
             connection.execute("PRAGMA user_version = 1")
         elif version != 1:
             raise RuntimeError(f"Unsupported database version: {version}")

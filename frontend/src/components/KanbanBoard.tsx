@@ -15,6 +15,7 @@ import { KanbanColumn } from "@/components/KanbanColumn";
 import { KanbanCardPreview } from "@/components/KanbanCardPreview";
 import { ChatSidebar } from "@/components/ChatSidebar";
 import {
+  ApiError,
   createCard,
   deleteCard,
   editCard,
@@ -50,8 +51,12 @@ export const KanbanBoard = () => {
     try {
       setBoard(await operation());
       return true;
-    } catch {
-      setError("The board could not be updated. Please try again.");
+    } catch (error) {
+      setError(
+        error instanceof ApiError && error.detail
+          ? error.detail
+          : "The board could not be updated. Please try again."
+      );
       return false;
     } finally {
       setBusy(false);

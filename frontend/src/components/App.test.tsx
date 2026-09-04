@@ -1,21 +1,25 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { App } from "@/components/App";
-import { getBoard, getSession, login, logout } from "@/lib/api";
+import { ApiError, getBoard, getSession, login, logout } from "@/lib/api";
 import { initialData } from "@/lib/kanban";
 
-vi.mock("@/lib/api", () => ({
-  getSession: vi.fn(),
-  login: vi.fn(),
-  logout: vi.fn(),
-  getBoard: vi.fn(),
-  createCard: vi.fn(),
-  deleteCard: vi.fn(),
-  editCard: vi.fn(),
-  moveBoardCard: vi.fn(),
-  renameColumn: vi.fn(),
-  sendChat: vi.fn(),
-}));
+vi.mock("@/lib/api", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/api")>("@/lib/api");
+  return {
+    ...actual,
+    getSession: vi.fn(),
+    login: vi.fn(),
+    logout: vi.fn(),
+    getBoard: vi.fn(),
+    createCard: vi.fn(),
+    deleteCard: vi.fn(),
+    editCard: vi.fn(),
+    moveBoardCard: vi.fn(),
+    renameColumn: vi.fn(),
+    sendChat: vi.fn(),
+  };
+});
 
 const mockedGetBoard = vi.mocked(getBoard);
 const mockedGetSession = vi.mocked(getSession);
@@ -66,7 +70,7 @@ describe("App authentication", () => {
 
   it("shows an error for invalid credentials", async () => {
     mockedGetSession.mockResolvedValue(null);
-    mockedLogin.mockRejectedValue(new Error("Unauthorized"));
+    mockedLogin.mockRejectedValue(new ApiError(401, "Invalid username or password"));
     render(<App />);
 
     await userEvent.type(await screen.findByLabelText(/username/i), "user");
@@ -75,6 +79,36 @@ describe("App authentication", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Invalid username or password."
+    );
+  });
+
+  it("shows the server's detail for a non-credential login failure", async () => {
+    mockedGetSession.mockResolvedValue(null);
+    mockedLogin.mockRejectedValue(
+      new ApiError(429, "Too many failed login attempts. Try again shortly.")
+    );
+    render(<App />);
+
+    await userEvent.type(await screen.findByLabelText(/username/i), "user");
+    await userEvent.type(screen.getByLabelText(/password/i), "password");
+    await userEvent.click(screen.getByRole("button", { name: /sign in/i }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Too many failed login attempts. Try again shortly."
+    );
+  });
+
+  it("shows a network error when the server cannot be reached", async () => {
+    mockedGetSession.mockResolvedValue(null);
+    mockedLogin.mockRejectedValue(new TypeError("Failed to fetch"));
+    render(<App />);
+
+    await userEvent.type(await screen.findByLabelText(/username/i), "user");
+    await userEvent.type(screen.getByLabelText(/password/i), "password");
+    await userEvent.click(screen.getByRole("button", { name: /sign in/i }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Unable to reach the server. Please try again."
     );
   });
 

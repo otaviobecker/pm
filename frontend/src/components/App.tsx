@@ -3,6 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { KanbanBoard } from "@/components/KanbanBoard";
 import {
+  ApiError,
   getSession,
   login,
   logout,
@@ -34,8 +35,14 @@ export const App = () => {
         String(form.get("password"))
       );
       setUser(authenticatedUser);
-    } catch {
-      setError("Invalid username or password.");
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        setError("Invalid username or password.");
+      } else if (error instanceof ApiError && error.detail) {
+        setError(error.detail);
+      } else {
+        setError("Unable to reach the server. Please try again.");
+      }
     } finally {
       setSubmitting(false);
     }

@@ -1,12 +1,14 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { sendChat, type ChatMessage } from "@/lib/api";
+import { ApiError, sendChat, type ChatMessage } from "@/lib/api";
 import type { BoardData } from "@/lib/kanban";
 
 type ChatSidebarProps = {
   onBoardUpdate: (board: BoardData) => void;
 };
+
+const HISTORY_LIMIT = 40;
 
 export const ChatSidebar = ({ onBoardUpdate }: ChatSidebarProps) => {
   const [open, setOpen] = useState(false);
@@ -29,7 +31,7 @@ export const ChatSidebar = ({ onBoardUpdate }: ChatSidebarProps) => {
     setMessages((current) => [...current, userMessage]);
 
     try {
-      const result = await sendChat(message, messages);
+      const result = await sendChat(message, messages.slice(-HISTORY_LIMIT));
       setMessages((current) => [
         ...current,
         { role: "assistant", content: result.message },
@@ -37,8 +39,12 @@ export const ChatSidebar = ({ onBoardUpdate }: ChatSidebarProps) => {
       if (result.board) {
         onBoardUpdate(result.board);
       }
-    } catch {
-      setError("The assistant could not respond. Please try again.");
+    } catch (error) {
+      setError(
+        error instanceof ApiError && error.detail
+          ? error.detail
+          : "The assistant could not respond. Please try again."
+      );
     } finally {
       setPending(false);
     }

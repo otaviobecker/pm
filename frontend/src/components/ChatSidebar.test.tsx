@@ -1,12 +1,16 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ChatSidebar } from "@/components/ChatSidebar";
-import { sendChat } from "@/lib/api";
+import { ApiError, sendChat } from "@/lib/api";
 import { initialData } from "@/lib/kanban";
 
-vi.mock("@/lib/api", () => ({
-  sendChat: vi.fn(),
-}));
+vi.mock("@/lib/api", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/api")>("@/lib/api");
+  return {
+    ...actual,
+    sendChat: vi.fn(),
+  };
+});
 
 const mockedSendChat = vi.mocked(sendChat);
 
@@ -82,4 +86,42 @@ describe("ChatSidebar", () => {
       "The assistant could not respond. Please try again."
     );
   });
+
+  it("shows the server's detail when the assistant request is rejected", async () => {
+    mockedSendChat.mockRejectedValue(
+      new ApiError(503, "OPENROUTER_API_KEY is not configured")
+    );
+    render(<ChatSidebar onBoardUpdate={vi.fn()} />);
+    await userEvent.click(screen.getByRole("button", { name: "Ask AI" }));
+    await userEvent.type(
+      screen.getByLabelText("Message the board assistant"),
+      "Help"
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "OPENROUTER_API_KEY is not configured"
+    );
+  });
+
+  it(
+    "caps the history sent to the server at the most recent messages",
+    async () => {
+      mockedSendChat.mockResolvedValue({ message: "ok", board: null });
+      render(<ChatSidebar onBoardUpdate={vi.fn()} />);
+      await userEvent.click(screen.getByRole("button", { name: "Ask AI" }));
+      const input = screen.getByLabelText("Message the board assistant");
+
+      for (let index = 0; index < 22; index += 1) {
+        await userEvent.clear(input);
+        await userEvent.type(input, `message ${index}`);
+        await userEvent.click(screen.getByRole("button", { name: "Send" }));
+        await screen.findAllByText("ok");
+      }
+
+      const lastCall = mockedSendChat.mock.calls.at(-1);
+      expect(lastCall?.[1]).toHaveLength(40);
+    },
+    15000
+  );
 });
