@@ -49,8 +49,10 @@ export const KanbanBoard = () => {
     setError("");
     try {
       setBoard(await operation());
+      return true;
     } catch {
       setError("The board could not be updated. Please try again.");
+      return false;
     } finally {
       setBusy(false);
     }
@@ -95,9 +97,8 @@ export const KanbanBoard = () => {
     void updateBoard(() => createCard(columnId, title, details));
   };
 
-  const handleEditCard = (cardId: string, title: string, details: string) => {
-    void updateBoard(() => editCard(cardId, title, details));
-  };
+  const handleEditCard = (cardId: string, title: string, details: string) =>
+    updateBoard(() => editCard(cardId, title, details));
 
   const handleDeleteCard = (_columnId: string, cardId: string) => {
     void updateBoard(() => deleteCard(cardId));

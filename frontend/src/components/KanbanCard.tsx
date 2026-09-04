@@ -6,7 +6,7 @@ import type { Card } from "@/lib/kanban";
 
 type KanbanCardProps = {
   card: Card;
-  onEdit: (cardId: string, title: string, details: string) => void;
+  onEdit: (cardId: string, title: string, details: string) => Promise<boolean>;
   onDelete: (cardId: string) => void;
 };
 
@@ -29,13 +29,15 @@ export const KanbanCard = ({ card, onEdit, onDelete }: KanbanCardProps) => {
     transition,
   };
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!title.trim()) {
       return;
     }
-    onEdit(card.id, title.trim(), details.trim());
-    setEditing(false);
+    const succeeded = await onEdit(card.id, title.trim(), details.trim());
+    if (succeeded) {
+      setEditing(false);
+    }
   };
 
   return (

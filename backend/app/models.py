@@ -1,6 +1,13 @@
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+
+def _require_nonblank(value: str) -> str:
+    stripped = value.strip()
+    if not stripped:
+        raise ValueError("must not be blank")
+    return stripped
 
 
 class LoginRequest(BaseModel):
@@ -32,10 +39,14 @@ class BoardResponse(BaseModel):
 class RenameColumnRequest(BaseModel):
     title: str = Field(min_length=1, max_length=100)
 
+    _validate_title = field_validator("title")(_require_nonblank)
+
 
 class CardRequest(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     details: str = Field(default="", max_length=5000)
+
+    _validate_title = field_validator("title")(_require_nonblank)
 
 
 class CreateCardRequest(CardRequest):
@@ -61,16 +72,20 @@ class AiCard(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: str
-    title: str
-    details: str
+    title: str = Field(min_length=1, max_length=200)
+    details: str = Field(default="", max_length=5000)
+
+    _validate_title = field_validator("title")(_require_nonblank)
 
 
 class AiColumn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: str
-    title: str
+    title: str = Field(min_length=1, max_length=100)
     cards: list[AiCard]
+
+    _validate_title = field_validator("title")(_require_nonblank)
 
 
 class AiBoard(BaseModel):

@@ -132,6 +132,19 @@ def test_column_rename_persists_without_reseeding(client: TestClient) -> None:
     assert board["columns"][0]["title"] == "Ideas"
 
 
+def test_blank_column_title_is_rejected(client: TestClient) -> None:
+    login(client)
+
+    response = client.patch(
+        "/api/board/columns/col-backlog",
+        json={"title": "   "},
+    )
+
+    assert response.status_code == 422
+    board = client.get("/api/board").json()
+    assert board["columns"][0]["title"] == "Backlog"
+
+
 def test_create_edit_and_delete_card(client: TestClient) -> None:
     login(client)
 
@@ -155,6 +168,22 @@ def test_create_edit_and_delete_card(client: TestClient) -> None:
     deleted = client.delete(f"/api/board/cards/{card_id}").json()
     assert card_id not in deleted["cards"]
     assert card_id not in deleted["columns"][0]["cardIds"]
+
+
+def test_blank_card_title_is_rejected(client: TestClient) -> None:
+    login(client)
+
+    created = client.post(
+        "/api/board/cards",
+        json={"columnId": "col-backlog", "title": "   ", "details": ""},
+    )
+    assert created.status_code == 422
+
+    edited = client.patch(
+        "/api/board/cards/card-1",
+        json={"title": "   ", "details": ""},
+    )
+    assert edited.status_code == 422
 
 
 def test_reorders_and_moves_cards(client: TestClient) -> None:
@@ -437,6 +466,31 @@ def test_duplicate_ai_card_references_are_rejected(
     )
 
     assert response.status_code == 422
+    assert client.get("/api/board").json() == before
+
+
+def test_ai_board_update_enforces_card_title_length(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    login(client)
+    before = client.get("/api/board").json()
+    invalid = structured_board(json.loads(json.dumps(before)))
+    invalid["columns"][0]["cards"][0]["title"] = "x" * 201
+    monkeypatch.setattr(
+        ai,
+        "post_openrouter",
+        lambda _: openrouter_response(
+            json.dumps({"message": "Changed it.", "board": invalid})
+        ),
+    )
+
+    response = client.post(
+        "/api/chat",
+        json={"message": "Make a title huge", "history": []},
+    )
+
+    assert response.status_code == 502
     assert client.get("/api/board").json() == before
 
 

@@ -8,9 +8,9 @@ import { NewCardForm } from "@/components/NewCardForm";
 type KanbanColumnProps = {
   column: Column;
   cards: Card[];
-  onRename: (columnId: string, title: string) => Promise<void>;
+  onRename: (columnId: string, title: string) => Promise<boolean>;
   onAddCard: (columnId: string, title: string, details: string) => void;
-  onEditCard: (cardId: string, title: string, details: string) => void;
+  onEditCard: (cardId: string, title: string, details: string) => Promise<boolean>;
   onDeleteCard: (columnId: string, cardId: string) => void;
 };
 
@@ -29,7 +29,10 @@ export const KanbanColumn = ({
     if (!nextTitle) {
       input.value = column.title;
     } else if (nextTitle !== column.title) {
-      await onRename(column.id, nextTitle);
+      const succeeded = await onRename(column.id, nextTitle);
+      if (!succeeded) {
+        input.value = column.title;
+      }
     }
   };
 

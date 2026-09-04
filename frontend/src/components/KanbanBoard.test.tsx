@@ -55,6 +55,19 @@ describe("KanbanBoard", () => {
     expect(input).toHaveValue("New Name");
   });
 
+  it("reverts the column title when renaming fails", async () => {
+    mockedRenameColumn.mockRejectedValue(new Error("network error"));
+    render(<KanbanBoard />);
+    const column = (await screen.findAllByTestId(/column-/i))[0];
+    const input = within(column).getByLabelText("Column title");
+    await userEvent.clear(input);
+    await userEvent.type(input, "New Name");
+    await userEvent.tab();
+
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    expect(input).toHaveValue(initialData.columns[0].title);
+  });
+
   it("adds and removes a card", async () => {
     const boardWithCard = structuredClone(initialData);
     boardWithCard.cards["card-new"] = {
@@ -110,5 +123,21 @@ describe("KanbanBoard", () => {
       "Draft quarterly themes with impact statements and metrics."
     );
     expect(await screen.findByText("Edited title")).toBeInTheDocument();
+  });
+
+  it("keeps the edit form open when saving a card fails", async () => {
+    mockedEditCard.mockRejectedValue(new Error("network error"));
+    render(<KanbanBoard />);
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Edit Align roadmap themes" })
+    );
+    const title = screen.getByLabelText("Card title");
+    await userEvent.clear(title);
+    await userEvent.type(title, "Edited title");
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    expect(screen.getByLabelText("Card title")).toHaveValue("Edited title");
   });
 });
