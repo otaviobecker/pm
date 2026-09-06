@@ -1,21 +1,24 @@
-# The Project Management MVP web app
+# The Project Management web app
 
 ## Business Requirements
 
 This project is building a Project Management App. Key features:
-- A user can sign in
-- When signed in, the user sees a Kanban board representing their project
-- The Kanban board has fixed columns that can be renamed
-- The cards on the Kanban board can be moved with drag and drop, and edited
-- There is an AI chat feature in a sidebar; the AI is able to create / edit / move one or more cards
+- Anyone can register an account, sign in, manage their profile, and change their password
+- Administrators can promote, deactivate, and delete accounts; the workspace always keeps one active administrator
+- A signed-in user sees the boards they own or have been invited to, and can create as many as they need
+- A board can be shared with editors and viewers, archived, and deleted by its owner
+- A board's columns can be renamed, added, reordered, deleted, and given a work-in-progress limit
+- Cards can be created, edited, deleted, moved with drag and drop, and carry a priority, due date, and assignee
+- The board can be filtered by text, priority, and assignee
+- There is an AI chat feature in a sidebar; the AI is able to create / edit / move one or more cards on the open board
 
 ## Limitations
 
-For the MVP, there will only be a user sign in (hardcoded to 'user' and 'password') but the database will support multiple users for future.
+The bundled `user` / `password` account exists so a fresh database is usable immediately. It is an ordinary administrator account and its password can be changed.
 
-For the MVP, there will only be 1 Kanban board per signed in user.
+Sharing is per board. There are no organizations or teams.
 
-For the MVP, this will run locally (in a docker container)
+This runs locally, in a docker container.
 
 ## Technical Decisions
 

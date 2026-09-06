@@ -1,6 +1,6 @@
 # Frontend guide
 
-This directory contains the static Next.js frontend for the Project Management MVP. Follow the root `AGENTS.md` and `docs/PLAN.md` in addition to this file.
+This directory contains the static Next.js frontend for the Project Management app. Follow the root `AGENTS.md` and `docs/PLAN.md` in addition to this file.
 
 ## Stack
 
@@ -8,7 +8,7 @@ This directory contains the static Next.js frontend for the Project Management M
 - Tailwind CSS 4 through `@import "tailwindcss"` in `src/app/globals.css`
 - `@dnd-kit` for sortable cards and cross-column drag and drop
 - Vitest, Testing Library, and jsdom for unit/component tests
-- Playwright with Chromium for browser tests
+- Playwright with Chromium for browser tests, run against the real FastAPI API
 - The `@/*` alias resolves to `src/*`
 
 ## Current structure
@@ -16,45 +16,48 @@ This directory contains the static Next.js frontend for the Project Management M
 - `src/app/layout.tsx` defines metadata and loads Space Grotesk and Manrope with `next/font`.
 - `src/app/page.tsx` renders the authenticated app as the only page.
 - `src/app/globals.css` defines global styles and the required color tokens.
-- `src/components/App.tsx` restores the session, owns sign-in and logout, and hands the user and logout handler to the board.
-- `src/components/KanbanBoard.tsx` owns the full-height app shell (top bar, board region, docked chat), loads server state, and coordinates board API actions and drag-and-drop.
-- `src/components/ChatSidebar.tsx` owns session-only AI conversation state and applies returned board updates.
-- `src/components/KanbanColumn.tsx` renders a droppable column, editable title, cards, and new-card form.
-- `src/components/KanbanCard.tsx` renders a sortable card with icon actions for drag, edit, and delete.
-- `src/components/KanbanCardPreview.tsx` renders the drag overlay.
-- `src/components/NewCardForm.tsx` manages local add-card form state.
+- `src/components/App.tsx` restores the session and switches between the auth screen and the workspace.
+- `src/components/AuthScreen.tsx` owns sign-in and registration.
+- `src/components/Workspace.tsx` is the shell: it loads the board list and the open board, owns the mutation runner every board action goes through, and hosts the header and dialogs.
+- `src/components/BoardRail.tsx` lists the boards, creates them, collapses, and toggles archived ones.
+- `src/components/BoardSettingsDialog.tsx` renames, shares, archives, leaves, and deletes a board.
+- `src/components/AccountDialog.tsx` owns the profile, password change, sign-out, and the administrator account list.
+- `src/components/Dialog.tsx` is the shared modal shell and the dialog control classes.
+- `src/components/KanbanBoard.tsx` renders the columns, owns filtering and drag-and-drop, and turns interactions into API calls.
+- `src/components/BoardFilters.tsx` owns the search, priority, and assignee filters.
+- `src/components/KanbanColumn.tsx` renders a droppable column, its editable title, its WIP badge, and its options menu (reorder, WIP limit, delete).
+- `src/components/KanbanCard.tsx` renders a sortable card with its priority, due date, and assignee chips, and the inline edit form.
+- `src/components/NewCardForm.tsx` and `NewColumnForm.tsx` manage local creation form state.
+- `src/components/ChatSidebar.tsx` owns session-only AI conversation state for the open board.
 - `src/components/icons.tsx` holds the inline SVG icon set; there is no icon dependency.
 - `src/lib/api.ts` is the typed same-origin API client.
-- `src/lib/kanban.ts` defines board types, seed fixtures, and the pure `moveCard` operation.
-- `src/lib/theme.ts` maps a column's position to its presentation-only accent colors.
-- `src/lib/kanban.test.ts` tests card reordering and cross-column moves.
-- `src/components/KanbanBoard.test.tsx` tests rendering, column renaming, and card creation/deletion.
-- `tests/kanban.spec.ts` tests core flows in a browser.
+- `src/lib/kanban.ts` defines the board types and the pure helpers: `moveCard`, `wipState`, `dueState`, role checks, and formatting.
+- `src/lib/theme.ts` maps a column's position, a priority, and a due-date bucket to presentation-only accent colors.
+- `src/test/fixtures.ts` builds the board, summary, member, and user fixtures the unit tests share.
+- `tests/` holds the Playwright specs and `tests/helpers.ts`, which registers a fresh account per test.
 
 ## Current behavior
 
-- Users sign in with the MVP credentials before the board is shown.
-- Board state is loaded from and mutated through the FastAPI API.
-- The board has five fixed columns. Titles are editable, but columns are not added, removed, or reordered.
-- Cards can be created, edited, deleted, reordered, and moved between columns.
+- Users sign in or register; registration creates the account, signs it in, and seeds a starter board.
+- A user can own many boards, switch between them from the rail, and the open board is remembered in `localStorage`.
+- A board can be shared with editors and viewers, archived, left, and deleted. Viewers and archived boards render read-only.
+- Columns can be renamed, added, reordered, deleted (choosing where their cards go), and given a WIP limit.
+- Cards can be created, edited, deleted, reordered, and moved between columns, and carry a priority, due date, and assignee.
+- The filter bar narrows the board by text, priority, and assignee; dragging is disabled while a filter is active because positions refer to the unfiltered column.
 - Board changes persist in SQLite through page and container restarts.
 - Dragging uses a pointer sensor with a six-pixel activation distance and `closestCorners` collision detection.
-- AI conversation history remains in `ChatSidebar` memory and resets on page reload.
-- A structured board returned by chat replaces the visible board immediately.
-- The layout fills the viewport: a fixed-height top bar, one row of equal-width columns that scroll horizontally only when they no longer fit, and per-column vertical scrolling.
-- Card drag, edit, and delete are icon buttons that keep their existing accessible labels; edit and delete fade in on hover or focus and stay visible below 1024px.
-- The assistant opens from a docked rail button on large screens and a floating button on small ones, then takes a docked panel beside the board from `lg` up and a full-height overlay below it.
-- Chat sends on Enter and inserts a newline on Shift+Enter.
+- AI conversation history remains in `ChatSidebar` memory, resets on page reload, and resets when the open board changes.
+- The layout fills the viewport: a board rail, a fixed-height top bar, one row of columns that scroll horizontally only when they no longer fit, and per-column vertical scrolling.
 
 ## Design conventions
 
-- Keep the required colors as CSS variables: yellow `#ecad0a`, blue `#209dd7`, purple `#753991`, navy `#032147`, and gray `#888888`. Column and card accents come from `columnAccent` in `src/lib/theme.ts` and use only those five values.
+- Keep the required colors as CSS variables: yellow `#ecad0a`, blue `#209dd7`, purple `#753991`, navy `#032147`, and gray `#888888`. Column, priority, and due-date accents come from `src/lib/theme.ts` and use only those values, plus one red reserved for destructive actions and overdue dates.
 - Use the inline icons in `src/components/icons.tsx` for actions instead of text buttons, and keep a descriptive `aria-label` on every icon-only control.
 - Prefer existing CSS variables and Tailwind utility classes over introducing another styling system.
 - Preserve accessible labels and stable `data-testid` values when changing tested interactions.
 - Keep board transformations immutable and place reusable pure board logic in `src/lib/kanban.ts`.
-- Keep transient form or display state local to the smallest component that owns it.
-- The production frontend will be a static export served by FastAPI; do not depend on a Next.js production server, server actions, or runtime-only Next.js APIs.
+- Keep transient form or display state local to the smallest component that owns it. Server state belongs to `Workspace`, and every mutation goes through its `run` helper so errors, the busy indicator, and the board list stay in sync.
+- The production frontend is a static export served by FastAPI; do not depend on a Next.js production server, server actions, or runtime-only Next.js APIs.
 - Browser code must call the backend through same-origin `/api` routes and must never receive `OPENROUTER_API_KEY`.
 
 ## Commands
@@ -71,4 +74,4 @@ npm run test:e2e
 npm run test:all
 ```
 
-Playwright starts the development server at `http://127.0.0.1:3000`. Add or update unit and browser coverage whenever user-visible board behavior changes.
+The browser tests exercise the real API. By default Playwright runs `npm run e2e:server`, which builds the export and starts the FastAPI backend on `127.0.0.1:3100` with `STATIC_DIR` pointing at `out/` and a throwaway `DATA_DIR`; that needs `uv` installed. Set `PLAYWRIGHT_BASE_URL` to reuse a running stack instead, for example the Docker container on `http://localhost:8000`. Add or update unit and browser coverage whenever user-visible behavior changes.

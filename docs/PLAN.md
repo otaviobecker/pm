@@ -279,3 +279,43 @@
 - The AI can create, edit, delete, or move one or more cards through validated structured output.
 - Successful AI board changes appear automatically and remain after reload.
 - The finished application runs locally in one Docker container and all tests pass.
+## Part 11: Grow the MVP into a multi-user, multi-board application
+
+The MVP constraints in this plan (one hardcoded account, one board per user, five
+fixed columns) were lifted in this part. The constraints that remain are the
+required color scheme, SQLite as the only datastore, the single-container
+deployment, and session-only chat history.
+
+### Implementation
+
+- [x] Add schema version 2 with `sessions`, `board_members`, credentials on `users`, many boards per owner, flexible columns, and card priority, due date, and assignee.
+- [x] Migrate a version 1 database in place, preserving its board, columns, and cards.
+- [x] Hash passwords with PBKDF2-SHA256 and persist sessions in SQLite, storing only the token digest.
+- [x] Add registration, profile updates, password changes, and administrator account management.
+- [x] Keep at least one active administrator in the workspace at all times.
+- [x] Scope every board operation through board membership, with owner, editor, and viewer roles.
+- [x] Add board creation, renaming, sharing, archiving, leaving, and deletion.
+- [x] Allow columns to be added, renamed, reordered, deleted with a destination for their cards, and given a work-in-progress limit.
+- [x] Add card priority, due date, and assignee, and enforce that an assignee is a board member.
+- [x] Add board filtering by text, priority, and assignee.
+- [x] Scope the AI chat endpoint to one board and let the assistant set priorities and due dates.
+- [x] Reorganize the backend into `app/routers` and `app/repositories`.
+- [x] Rebuild the frontend around an auth screen, a board rail, a workspace shell, and board and account dialogs.
+
+### Tests
+
+- [x] Cover registration, sign-in, throttling, session persistence across a restart, and session revocation.
+- [x] Cover the member directory, profile changes, and administrator actions including the last-administrator guard.
+- [x] Cover board isolation between accounts and each membership role's permissions.
+- [x] Cover column creation, reordering, deletion with card re-homing, and WIP limits.
+- [x] Cover card fields, assignee validation, WIP enforcement, moves, and concurrent creation.
+- [x] Cover the version 1 to version 2 migration against a database built with the old schema.
+- [x] Rebuild the frontend unit tests around the new components and add a workspace integration suite.
+- [x] Point the browser tests at the real API and add board, sharing, filtering, and column specs.
+
+### Success criteria
+
+- Any number of accounts, each with any number of boards, share one SQLite database safely.
+- A board is only reachable by its members, and each role can do exactly what it should.
+- An existing version 1 database keeps its data after upgrading.
+- Backend statement coverage stays above 95 percent and all suites pass.
