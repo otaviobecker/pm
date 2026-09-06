@@ -1,24 +1,52 @@
+"use client";
+
 import { useState, type FormEvent } from "react";
 import { CheckIcon, CloseIcon, PlusIcon } from "@/components/icons";
+import type { CardFields } from "@/lib/api";
+import {
+  priorities,
+  priorityLabels,
+  type BoardMember,
+  type Priority,
+} from "@/lib/kanban";
 
-const initialFormState = { title: "", details: "" };
-
-type NewCardFormProps = {
-  onAdd: (title: string, details: string) => void;
+const initialFormState = {
+  title: "",
+  details: "",
+  priority: "medium" as Priority,
+  dueDate: "",
+  assigneeId: "",
 };
 
-export const NewCardForm = ({ onAdd }: NewCardFormProps) => {
+type NewCardFormProps = {
+  members: BoardMember[];
+  onAdd: (fields: CardFields & { title: string }) => Promise<boolean>;
+};
+
+const inputClass =
+  "w-full rounded-lg border border-[var(--stroke)] bg-white px-2.5 py-1.5 text-xs font-semibold text-[var(--navy-dark)] outline-none transition focus:border-[var(--primary-blue)]";
+
+export const NewCardForm = ({ members, onAdd }: NewCardFormProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const [formState, setFormState] = useState(initialFormState);
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!formState.title.trim()) {
       return;
     }
-    onAdd(formState.title.trim(), formState.details.trim());
-    setFormState(initialFormState);
-    setIsOpen(false);
+    const added = await onAdd({
+      title: formState.title.trim(),
+      details: formState.details.trim(),
+      priority: formState.priority,
+      dueDate: formState.dueDate === "" ? null : formState.dueDate,
+      assigneeId:
+        formState.assigneeId === "" ? null : Number(formState.assigneeId),
+    });
+    if (added) {
+      setFormState(initialFormState);
+      setIsOpen(false);
+    }
   };
 
   if (!isOpen) {
@@ -44,8 +72,9 @@ export const NewCardForm = ({ onAdd }: NewCardFormProps) => {
           setFormState((prev) => ({ ...prev, title: event.target.value }))
         }
         placeholder="Card title"
+        aria-label="New card title"
         autoFocus
-        className="w-full rounded-lg border border-[var(--stroke)] bg-white px-2.5 py-1.5 text-sm font-semibold text-[var(--navy-dark)] outline-none transition focus:border-[var(--primary-blue)]"
+        className={`${inputClass} text-sm`}
         required
       />
       <textarea
@@ -54,9 +83,55 @@ export const NewCardForm = ({ onAdd }: NewCardFormProps) => {
           setFormState((prev) => ({ ...prev, details: event.target.value }))
         }
         placeholder="Details"
+        aria-label="New card details"
         rows={2}
-        className="w-full resize-none rounded-lg border border-[var(--stroke)] bg-white px-2.5 py-1.5 text-xs leading-5 text-[var(--navy-dark)] outline-none transition focus:border-[var(--primary-blue)]"
+        className={`${inputClass} resize-none leading-5`}
       />
+      <div className="grid grid-cols-2 gap-1.5">
+        <select
+          value={formState.priority}
+          onChange={(event) =>
+            setFormState((prev) => ({
+              ...prev,
+              priority: event.target.value as Priority,
+            }))
+          }
+          aria-label="New card priority"
+          className={inputClass}
+        >
+          {priorities.map((priority) => (
+            <option key={priority} value={priority}>
+              {priorityLabels[priority]}
+            </option>
+          ))}
+        </select>
+        <input
+          type="date"
+          value={formState.dueDate}
+          onChange={(event) =>
+            setFormState((prev) => ({ ...prev, dueDate: event.target.value }))
+          }
+          aria-label="New card due date"
+          className={inputClass}
+        />
+      </div>
+      {members.length > 1 ? (
+        <select
+          value={formState.assigneeId}
+          onChange={(event) =>
+            setFormState((prev) => ({ ...prev, assigneeId: event.target.value }))
+          }
+          aria-label="New card assignee"
+          className={inputClass}
+        >
+          <option value="">Unassigned</option>
+          {members.map((member) => (
+            <option key={member.userId} value={member.userId}>
+              {member.displayName || member.username}
+            </option>
+          ))}
+        </select>
+      ) : null}
       <div className="flex items-center justify-end gap-1.5">
         <button
           type="button"

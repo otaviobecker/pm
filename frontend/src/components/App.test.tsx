@@ -1,8 +1,18 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { App } from "@/components/App";
-import { ApiError, getBoard, getSession, login, logout } from "@/lib/api";
-import { initialData } from "@/lib/kanban";
+import {
+  ApiError,
+  getAllUsers,
+  getBoard,
+  getBoards,
+  getDirectory,
+  getSession,
+  login,
+  logout,
+  register,
+} from "@/lib/api";
+import { makeBoard, makeSummary, makeUser } from "@/test/fixtures";
 
 vi.mock("@/lib/api", async () => {
   const actual = await vi.importActual<typeof import("@/lib/api")>("@/lib/api");
@@ -10,25 +20,27 @@ vi.mock("@/lib/api", async () => {
     ...actual,
     getSession: vi.fn(),
     login: vi.fn(),
+    register: vi.fn(),
     logout: vi.fn(),
+    getBoards: vi.fn(),
     getBoard: vi.fn(),
-    createCard: vi.fn(),
-    deleteCard: vi.fn(),
-    editCard: vi.fn(),
-    moveBoardCard: vi.fn(),
-    renameColumn: vi.fn(),
-    sendChat: vi.fn(),
+    getDirectory: vi.fn(),
+    getAllUsers: vi.fn(),
   };
 });
 
-const mockedGetBoard = vi.mocked(getBoard);
 const mockedGetSession = vi.mocked(getSession);
 const mockedLogin = vi.mocked(login);
+const mockedRegister = vi.mocked(register);
 const mockedLogout = vi.mocked(logout);
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockedGetBoard.mockResolvedValue(structuredClone(initialData));
+  window.localStorage.clear();
+  vi.mocked(getBoards).mockResolvedValue([makeSummary()]);
+  vi.mocked(getBoard).mockResolvedValue(makeBoard());
+  vi.mocked(getDirectory).mockResolvedValue([]);
+  vi.mocked(getAllUsers).mockResolvedValue([]);
 });
 
 describe("App authentication", () => {
@@ -43,19 +55,18 @@ describe("App authentication", () => {
   });
 
   it("restores an authenticated session", async () => {
-    mockedGetSession.mockResolvedValue({ username: "user" });
+    mockedGetSession.mockResolvedValue(makeUser());
 
     render(<App />);
 
     expect(
       await screen.findByRole("heading", { name: /kanban studio/i })
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /sign out/i })).toBeInTheDocument();
   });
 
   it("signs in with valid credentials", async () => {
     mockedGetSession.mockResolvedValue(null);
-    mockedLogin.mockResolvedValue({ username: "user" });
+    mockedLogin.mockResolvedValue(makeUser());
     render(<App />);
 
     await userEvent.type(await screen.findByLabelText(/username/i), "user");
@@ -66,6 +77,42 @@ describe("App authentication", () => {
     expect(
       await screen.findByRole("heading", { name: /kanban studio/i })
     ).toBeInTheDocument();
+  });
+
+  it("registers a new account", async () => {
+    mockedGetSession.mockResolvedValue(null);
+    mockedRegister.mockResolvedValue(
+      makeUser({ id: 2, username: "casey", displayName: "Casey", role: "member" })
+    );
+    render(<App />);
+
+    await userEvent.click(await screen.findByRole("button", { name: /create one/i }));
+    await userEvent.type(screen.getByLabelText(/username/i), "casey");
+    await userEvent.type(screen.getByLabelText(/display name/i), "Casey");
+    await userEvent.type(screen.getByLabelText(/password/i), "correct-horse");
+    await userEvent.click(screen.getByRole("button", { name: /create account/i }));
+
+    expect(mockedRegister).toHaveBeenCalledWith("casey", "correct-horse", "Casey");
+    expect(
+      await screen.findByRole("heading", { name: /kanban studio/i })
+    ).toBeInTheDocument();
+  });
+
+  it("reports a taken username during registration", async () => {
+    mockedGetSession.mockResolvedValue(null);
+    mockedRegister.mockRejectedValue(
+      new ApiError(409, "That username is already taken")
+    );
+    render(<App />);
+
+    await userEvent.click(await screen.findByRole("button", { name: /create one/i }));
+    await userEvent.type(screen.getByLabelText(/username/i), "user");
+    await userEvent.type(screen.getByLabelText(/password/i), "correct-horse");
+    await userEvent.click(screen.getByRole("button", { name: /create account/i }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "That username is already taken"
+    );
   });
 
   it("shows an error for invalid credentials", async () => {
@@ -112,14 +159,15 @@ describe("App authentication", () => {
     );
   });
 
-  it("logs out and returns to sign-in", async () => {
-    mockedGetSession.mockResolvedValue({ username: "user" });
+  it("signs out from the account dialog and returns to sign-in", async () => {
+    mockedGetSession.mockResolvedValue(makeUser());
     mockedLogout.mockResolvedValue();
     render(<App />);
 
     await userEvent.click(
-      await screen.findByRole("button", { name: /sign out/i })
+      await screen.findByRole("button", { name: /account and settings/i })
     );
+    await userEvent.click(await screen.findByRole("button", { name: /^sign out$/i }));
 
     expect(mockedLogout).toHaveBeenCalledOnce();
     expect(

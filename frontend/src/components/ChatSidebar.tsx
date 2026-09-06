@@ -6,6 +6,7 @@ import type { BoardData } from "@/lib/kanban";
 import { CloseIcon, SendIcon, SparkleIcon } from "@/components/icons";
 
 type ChatSidebarProps = {
+  boardId: number;
   onBoardUpdate: (board: BoardData) => void;
 };
 
@@ -17,13 +18,19 @@ const suggestions = [
   "Add a card for release notes",
 ];
 
-export const ChatSidebar = ({ onBoardUpdate }: ChatSidebarProps) => {
+export const ChatSidebar = ({ boardId, onBoardUpdate }: ChatSidebarProps) => {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  // The conversation is about one board, so switching boards starts a new thread.
+  useEffect(() => {
+    setMessages([]);
+    setError("");
+  }, [boardId]);
 
   useEffect(() => {
     const thread = scrollRef.current;
@@ -44,7 +51,11 @@ export const ChatSidebar = ({ onBoardUpdate }: ChatSidebarProps) => {
     setMessages((current) => [...current, userMessage]);
 
     try {
-      const result = await sendChat(message, messages.slice(-HISTORY_LIMIT));
+      const result = await sendChat(
+        boardId,
+        message,
+        messages.slice(-HISTORY_LIMIT)
+      );
       setMessages((current) => [
         ...current,
         { role: "assistant", content: result.message },

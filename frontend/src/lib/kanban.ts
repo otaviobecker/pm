@@ -1,75 +1,75 @@
+export type Priority = "low" | "medium" | "high" | "urgent";
+export type BoardRole = "owner" | "editor" | "viewer";
+export type AccountRole = "admin" | "member";
+
 export type Card = {
   id: string;
   title: string;
   details: string;
+  priority: Priority;
+  dueDate: string | null;
+  assigneeId: number | null;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type Column = {
   id: string;
   title: string;
+  wipLimit: number | null;
   cardIds: string[];
 };
 
-export type BoardData = {
-  columns: Column[];
-  cards: Record<string, Card>;
+export type BoardMember = {
+  userId: number;
+  username: string;
+  displayName: string;
+  role: BoardRole;
 };
 
-export const initialData: BoardData = {
-  columns: [
-    { id: "col-backlog", title: "Backlog", cardIds: ["card-1", "card-2"] },
-    { id: "col-discovery", title: "Discovery", cardIds: ["card-3"] },
-    {
-      id: "col-progress",
-      title: "In Progress",
-      cardIds: ["card-4", "card-5"],
-    },
-    { id: "col-review", title: "Review", cardIds: ["card-6"] },
-    { id: "col-done", title: "Done", cardIds: ["card-7", "card-8"] },
-  ],
-  cards: {
-    "card-1": {
-      id: "card-1",
-      title: "Align roadmap themes",
-      details: "Draft quarterly themes with impact statements and metrics.",
-    },
-    "card-2": {
-      id: "card-2",
-      title: "Gather customer signals",
-      details: "Review support tags, sales notes, and churn feedback.",
-    },
-    "card-3": {
-      id: "card-3",
-      title: "Prototype analytics view",
-      details: "Sketch initial dashboard layout and key drill-downs.",
-    },
-    "card-4": {
-      id: "card-4",
-      title: "Refine status language",
-      details: "Standardize column labels and tone across the board.",
-    },
-    "card-5": {
-      id: "card-5",
-      title: "Design card layout",
-      details: "Add hierarchy and spacing for scanning dense lists.",
-    },
-    "card-6": {
-      id: "card-6",
-      title: "QA micro-interactions",
-      details: "Verify hover, focus, and loading states.",
-    },
-    "card-7": {
-      id: "card-7",
-      title: "Ship marketing page",
-      details: "Final copy approved and asset pack delivered.",
-    },
-    "card-8": {
-      id: "card-8",
-      title: "Close onboarding sprint",
-      details: "Document release notes and share internally.",
-    },
-  },
+export type BoardData = {
+  id: number;
+  name: string;
+  description: string;
+  archived: boolean;
+  ownerId: number;
+  role: BoardRole;
+  createdAt: string;
+  updatedAt: string;
+  columns: Column[];
+  cards: Record<string, Card>;
+  members: BoardMember[];
 };
+
+export type BoardSummary = {
+  id: number;
+  name: string;
+  description: string;
+  archived: boolean;
+  ownerId: number;
+  ownerUsername: string;
+  ownerDisplayName: string;
+  role: BoardRole;
+  cardCount: number;
+  memberCount: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export const priorities: Priority[] = ["low", "medium", "high", "urgent"];
+
+export const priorityLabels: Record<Priority, string> = {
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+  urgent: "Urgent",
+};
+
+/** Roles ordered from least to most capable, used for permission checks. */
+const roleRank: Record<BoardRole, number> = { viewer: 0, editor: 1, owner: 2 };
+
+export const canEdit = (role: BoardRole) => roleRank[role] >= roleRank.editor;
+export const isOwner = (role: BoardRole) => role === "owner";
 
 const isColumnId = (columns: Column[], id: string) =>
   columns.some((column) => column.id === id);
@@ -161,8 +161,45 @@ export const moveCard = (
   });
 };
 
-export const createId = (prefix: string) => {
-  const randomPart = Math.random().toString(36).slice(2, 8);
-  const timePart = Date.now().toString(36);
-  return `${prefix}-${randomPart}${timePart}`;
+/** How many cards a column holds relative to its WIP limit. */
+export const wipState = (column: Column) => {
+  if (column.wipLimit === null) {
+    return "none" as const;
+  }
+  if (column.cardIds.length > column.wipLimit) {
+    return "over" as const;
+  }
+  return column.cardIds.length === column.wipLimit
+    ? ("full" as const)
+    : ("under" as const);
 };
+
+/** Relative day bucket for a due date, used to colour the badge. */
+export const dueState = (dueDate: string | null, today = new Date()) => {
+  if (!dueDate) {
+    return "none" as const;
+  }
+  const due = new Date(`${dueDate}T00:00:00`);
+  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const days = Math.round((due.getTime() - start.getTime()) / 86_400_000);
+  if (days < 0) {
+    return "overdue" as const;
+  }
+  if (days === 0) {
+    return "today" as const;
+  }
+  return days <= 3 ? ("soon" as const) : ("later" as const);
+};
+
+export const formatDueDate = (dueDate: string) => {
+  const due = new Date(`${dueDate}T00:00:00`);
+  return due.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+};
+
+export const initials = (name: string) =>
+  name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("") || name.slice(0, 2).toUpperCase();

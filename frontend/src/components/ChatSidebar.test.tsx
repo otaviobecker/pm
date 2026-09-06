@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ChatSidebar } from "@/components/ChatSidebar";
 import { ApiError, sendChat } from "@/lib/api";
-import { initialData } from "@/lib/kanban";
+import { makeBoard } from "@/test/fixtures";
 
 vi.mock("@/lib/api", async () => {
   const actual = await vi.importActual<typeof import("@/lib/api")>("@/lib/api");
@@ -20,7 +20,7 @@ beforeEach(() => {
 
 describe("ChatSidebar", () => {
   it("opens and closes", async () => {
-    render(<ChatSidebar onBoardUpdate={vi.fn()} />);
+    render(<ChatSidebar boardId={7} onBoardUpdate={vi.fn()} />);
 
     await userEvent.click(screen.getByRole("button", { name: "Ask AI" }));
     expect(
@@ -37,7 +37,7 @@ describe("ChatSidebar", () => {
     mockedSendChat
       .mockResolvedValueOnce({ message: "First answer", board: null })
       .mockResolvedValueOnce({ message: "Second answer", board: null });
-    render(<ChatSidebar onBoardUpdate={vi.fn()} />);
+    render(<ChatSidebar boardId={7} onBoardUpdate={vi.fn()} />);
     await userEvent.click(screen.getByRole("button", { name: "Ask AI" }));
 
     const input = screen.getByLabelText("Message the board assistant");
@@ -48,14 +48,14 @@ describe("ChatSidebar", () => {
     await userEvent.type(input, "Second question");
     await userEvent.click(screen.getByRole("button", { name: "Send" }));
     expect(await screen.findByText("Second answer")).toBeInTheDocument();
-    expect(mockedSendChat).toHaveBeenLastCalledWith("Second question", [
+    expect(mockedSendChat).toHaveBeenLastCalledWith(7, "Second question", [
       { role: "user", content: "First question" },
       { role: "assistant", content: "First answer" },
     ]);
   });
 
   it("fills the composer from a suggestion", async () => {
-    render(<ChatSidebar onBoardUpdate={vi.fn()} />);
+    render(<ChatSidebar boardId={7} onBoardUpdate={vi.fn()} />);
     await userEvent.click(screen.getByRole("button", { name: "Ask AI" }));
 
     await userEvent.click(
@@ -69,7 +69,7 @@ describe("ChatSidebar", () => {
 
   it("sends on Enter and keeps Shift+Enter for a new line", async () => {
     mockedSendChat.mockResolvedValue({ message: "Sent answer", board: null });
-    render(<ChatSidebar onBoardUpdate={vi.fn()} />);
+    render(<ChatSidebar boardId={7} onBoardUpdate={vi.fn()} />);
     await userEvent.click(screen.getByRole("button", { name: "Ask AI" }));
     const input = screen.getByLabelText("Message the board assistant");
 
@@ -80,6 +80,7 @@ describe("ChatSidebar", () => {
 
     expect(await screen.findByText("Sent answer")).toBeInTheDocument();
     expect(mockedSendChat).toHaveBeenCalledWith(
+      7,
       ["First line", "second line"].join("\n"),
       []
     );
@@ -88,11 +89,12 @@ describe("ChatSidebar", () => {
 
   it("applies a board returned by the assistant", async () => {
     const onBoardUpdate = vi.fn();
+    const board = makeBoard();
     mockedSendChat.mockResolvedValue({
       message: "Board updated",
-      board: initialData,
+      board,
     });
-    render(<ChatSidebar onBoardUpdate={onBoardUpdate} />);
+    render(<ChatSidebar boardId={7} onBoardUpdate={onBoardUpdate} />);
     await userEvent.click(screen.getByRole("button", { name: "Ask AI" }));
     await userEvent.type(
       screen.getByLabelText("Message the board assistant"),
@@ -101,12 +103,12 @@ describe("ChatSidebar", () => {
     await userEvent.click(screen.getByRole("button", { name: "Send" }));
 
     expect(await screen.findByText("Board updated")).toBeInTheDocument();
-    expect(onBoardUpdate).toHaveBeenCalledWith(initialData);
+    expect(onBoardUpdate).toHaveBeenCalledWith(board);
   });
 
   it("shows a recoverable request error", async () => {
     mockedSendChat.mockRejectedValue(new Error("Request failed"));
-    render(<ChatSidebar onBoardUpdate={vi.fn()} />);
+    render(<ChatSidebar boardId={7} onBoardUpdate={vi.fn()} />);
     await userEvent.click(screen.getByRole("button", { name: "Ask AI" }));
     await userEvent.type(
       screen.getByLabelText("Message the board assistant"),
@@ -123,7 +125,7 @@ describe("ChatSidebar", () => {
     mockedSendChat.mockRejectedValue(
       new ApiError(503, "OPENROUTER_API_KEY is not configured")
     );
-    render(<ChatSidebar onBoardUpdate={vi.fn()} />);
+    render(<ChatSidebar boardId={7} onBoardUpdate={vi.fn()} />);
     await userEvent.click(screen.getByRole("button", { name: "Ask AI" }));
     await userEvent.type(
       screen.getByLabelText("Message the board assistant"),
@@ -140,7 +142,7 @@ describe("ChatSidebar", () => {
     "caps the history sent to the server at the most recent messages",
     async () => {
       mockedSendChat.mockResolvedValue({ message: "ok", board: null });
-      render(<ChatSidebar onBoardUpdate={vi.fn()} />);
+      render(<ChatSidebar boardId={7} onBoardUpdate={vi.fn()} />);
       await userEvent.click(screen.getByRole("button", { name: "Ask AI" }));
       const input = screen.getByLabelText("Message the board assistant");
 
@@ -152,7 +154,7 @@ describe("ChatSidebar", () => {
       }
 
       const lastCall = mockedSendChat.mock.calls.at(-1);
-      expect(lastCall?.[1]).toHaveLength(40);
+      expect(lastCall?.[2]).toHaveLength(40);
     },
     15000
   );

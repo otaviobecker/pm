@@ -1,3 +1,4 @@
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -16,7 +17,12 @@ from app.middleware import limit_request_body_size
 from app.repositories import sessions
 from app.routers import auth, boards, cards, chat, users
 
-STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
+# Defaults to the development fallback page; the Docker build and the browser
+# tests point this at the exported Next.js frontend.
+STATIC_DIR = Path(
+    os.environ.get("STATIC_DIR")
+    or Path(__file__).resolve().parent.parent / "static"
+)
 
 
 @asynccontextmanager
