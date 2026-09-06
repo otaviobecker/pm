@@ -54,6 +54,38 @@ describe("ChatSidebar", () => {
     ]);
   });
 
+  it("fills the composer from a suggestion", async () => {
+    render(<ChatSidebar onBoardUpdate={vi.fn()} />);
+    await userEvent.click(screen.getByRole("button", { name: "Ask AI" }));
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "What deserves attention next?" })
+    );
+
+    expect(screen.getByLabelText("Message the board assistant")).toHaveValue(
+      "What deserves attention next?"
+    );
+  });
+
+  it("sends on Enter and keeps Shift+Enter for a new line", async () => {
+    mockedSendChat.mockResolvedValue({ message: "Sent answer", board: null });
+    render(<ChatSidebar onBoardUpdate={vi.fn()} />);
+    await userEvent.click(screen.getByRole("button", { name: "Ask AI" }));
+    const input = screen.getByLabelText("Message the board assistant");
+
+    await userEvent.type(input, "First line{Shift>}{Enter}{/Shift}second line");
+    expect(mockedSendChat).not.toHaveBeenCalled();
+
+    await userEvent.type(input, "{Enter}");
+
+    expect(await screen.findByText("Sent answer")).toBeInTheDocument();
+    expect(mockedSendChat).toHaveBeenCalledWith(
+      ["First line", "second line"].join("\n"),
+      []
+    );
+    expect(input).toHaveValue("");
+  });
+
   it("applies a board returned by the assistant", async () => {
     const onBoardUpdate = vi.fn();
     mockedSendChat.mockResolvedValue({

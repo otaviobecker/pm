@@ -14,6 +14,7 @@ import {
 import { KanbanColumn } from "@/components/KanbanColumn";
 import { KanbanCardPreview } from "@/components/KanbanCardPreview";
 import { ChatSidebar } from "@/components/ChatSidebar";
+import { BoardIcon, CloseIcon, SignOutIcon } from "@/components/icons";
 import {
   ApiError,
   createCard,
@@ -22,10 +23,17 @@ import {
   getBoard,
   moveBoardCard,
   renameColumn,
+  type User,
 } from "@/lib/api";
 import { moveCard, type BoardData } from "@/lib/kanban";
+import { columnAccent } from "@/lib/theme";
 
-export const KanbanBoard = () => {
+type KanbanBoardProps = {
+  user?: User | null;
+  onLogout?: () => void;
+};
+
+export const KanbanBoard = ({ user, onLogout }: KanbanBoardProps) => {
   const [board, setBoard] = useState<BoardData | null>(null);
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -44,6 +52,17 @@ export const KanbanBoard = () => {
   );
 
   const cardsById = useMemo(() => board?.cards ?? {}, [board?.cards]);
+
+  const totals = useMemo(() => {
+    if (!board) {
+      return { cards: 0, done: 0 };
+    }
+    const lastColumn = board.columns[board.columns.length - 1];
+    return {
+      cards: Object.keys(board.cards).length,
+      done: lastColumn ? lastColumn.cardIds.length : 0,
+    };
+  }, [board]);
 
   const updateBoard = async (operation: () => Promise<BoardData>) => {
     setBusy(true);
@@ -110,6 +129,9 @@ export const KanbanBoard = () => {
   };
 
   const activeCard = activeCardId ? cardsById[activeCardId] : null;
+  const activeColumnIndex = board?.columns.findIndex((column) =>
+    activeCardId ? column.cardIds.includes(activeCardId) : false
+  );
 
   if (!board) {
     return (
@@ -121,53 +143,99 @@ export const KanbanBoard = () => {
     );
   }
 
-  return (
-    <div className="relative overflow-hidden">
-      <div className="pointer-events-none absolute left-0 top-0 h-[420px] w-[420px] -translate-x-1/3 -translate-y-1/3 rounded-full bg-[radial-gradient(circle,_rgba(32,157,215,0.25)_0%,_rgba(32,157,215,0.05)_55%,_transparent_70%)]" />
-      <div className="pointer-events-none absolute bottom-0 right-0 h-[520px] w-[520px] translate-x-1/4 translate-y-1/4 rounded-full bg-[radial-gradient(circle,_rgba(117,57,145,0.18)_0%,_rgba(117,57,145,0.05)_55%,_transparent_75%)]" />
+  const donePercent = totals.cards
+    ? Math.round((totals.done / totals.cards) * 100)
+    : 0;
 
-      <main className="relative mx-auto flex min-h-screen max-w-[1500px] flex-col gap-10 px-6 pb-16 pt-12">
-        {busy ? <div className="fixed inset-0 z-10 cursor-wait" /> : null}
-        {error ? (
-          <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
-            {error}
-          </p>
-        ) : null}
-        <header className="flex flex-col gap-6 rounded-[32px] border border-[var(--stroke)] bg-white/80 p-8 shadow-[var(--shadow)] backdrop-blur">
-          <div className="flex flex-wrap items-start justify-between gap-6">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.35em] text-[var(--gray-text)]">
-                Single Board Kanban
-              </p>
-              <h1 className="mt-3 font-display text-4xl font-semibold text-[var(--navy-dark)]">
-                Kanban Studio
-              </h1>
-              <p className="mt-3 max-w-xl text-sm leading-6 text-[var(--gray-text)]">
-                Keep momentum visible. Rename columns, drag cards between stages,
-                and capture quick notes without getting buried in settings.
-              </p>
-            </div>
-            <div className="rounded-2xl border border-[var(--stroke)] bg-[var(--surface)] px-5 py-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[var(--gray-text)]">
-                Focus
-              </p>
-              <p className="mt-2 text-lg font-semibold text-[var(--primary-blue)]">
-                One board. Five columns. Zero clutter.
-              </p>
-            </div>
+  return (
+    <div className="flex h-screen w-full overflow-hidden bg-[var(--surface)]">
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="z-20 flex h-16 shrink-0 items-center gap-3 border-b border-[var(--stroke)] bg-white/85 px-5 backdrop-blur">
+          <span
+            aria-hidden
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[var(--navy-dark)] text-white"
+          >
+            <BoardIcon width={18} height={18} />
+          </span>
+          <div className="min-w-0">
+            <h1 className="truncate font-display text-lg font-semibold leading-none text-[var(--navy-dark)]">
+              Kanban Studio
+            </h1>
+            <p className="mt-1 truncate text-[10px] font-semibold uppercase tracking-[0.3em] text-[var(--gray-text)]">
+              Single board workspace
+            </p>
           </div>
-          <div className="flex flex-wrap items-center gap-4">
-            {board.columns.map((column) => (
-              <div
-                key={column.id}
-                className="flex items-center gap-2 rounded-full border border-[var(--stroke)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--navy-dark)]"
-              >
-                <span className="h-2 w-2 rounded-full bg-[var(--accent-yellow)]" />
-                {column.title}
+
+          <div className="ml-auto flex items-center gap-4">
+            <div className="hidden items-center gap-3 md:flex">
+              <div className="text-right">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[var(--gray-text)]">
+                  Progress
+                </p>
+                <p className="text-xs font-semibold tabular-nums text-[var(--navy-dark)]">
+                  {totals.done} of {totals.cards} done
+                </p>
               </div>
-            ))}
+              <div
+                className="h-1.5 w-28 overflow-hidden rounded-full bg-[var(--surface-muted)]"
+                role="progressbar"
+                aria-label="Cards done"
+                aria-valuenow={donePercent}
+                aria-valuemin={0}
+                aria-valuemax={100}
+              >
+                <span
+                  className="block h-full rounded-full bg-[var(--primary-blue)] transition-[width] duration-300"
+                  style={{ width: `${donePercent}%` }}
+                />
+              </div>
+            </div>
+
+            {user ? (
+              <div className="flex items-center gap-2 border-l border-[var(--stroke)] pl-4">
+                <span
+                  aria-hidden
+                  className="grid h-8 w-8 place-items-center rounded-full bg-[var(--secondary-purple)] text-xs font-bold uppercase text-white"
+                >
+                  {user.username.slice(0, 2)}
+                </span>
+                <span className="hidden text-xs font-semibold text-[var(--navy-dark)] sm:inline">
+                  {user.username}
+                </span>
+                {onLogout ? (
+                  <button
+                    type="button"
+                    onClick={onLogout}
+                    className="icon-button"
+                    aria-label="Sign out"
+                    title="Sign out"
+                  >
+                    <SignOutIcon width={16} height={16} />
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         </header>
+
+        {error ? (
+          <div className="shrink-0 px-5 pt-3">
+            <p
+              role="alert"
+              className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-700"
+            >
+              <span className="flex-1">{error}</span>
+              <button
+                type="button"
+                onClick={() => setError("")}
+                className="icon-button h-6 w-6 text-red-700 hover:bg-red-100 hover:text-red-800"
+                aria-label="Dismiss error"
+              >
+                <CloseIcon width={13} height={13} />
+              </button>
+            </p>
+          </div>
+        ) : null}
 
         <DndContext
           sensors={sensors}
@@ -175,33 +243,49 @@ export const KanbanBoard = () => {
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
         >
-          <section className="grid gap-6 lg:grid-cols-5">
-            {board.columns.map((column) => (
-              <KanbanColumn
-                key={`${column.id}-${column.title}`}
-                column={column}
-                cards={column.cardIds.map((cardId) => board.cards[cardId])}
-                onRename={handleRenameColumn}
-                onAddCard={handleAddCard}
-                onEditCard={handleEditCard}
-                onDeleteCard={handleDeleteCard}
-              />
-            ))}
-          </section>
+          <main className="scroll-slim min-h-0 flex-1 overflow-x-auto overflow-y-hidden px-5 py-4">
+            <section className="flex h-full min-h-0 w-full gap-3">
+              {board.columns.map((column, index) => (
+                <KanbanColumn
+                  key={`${column.id}-${column.title}`}
+                  column={column}
+                  accent={columnAccent(index)}
+                  cards={column.cardIds.map((cardId) => board.cards[cardId])}
+                  onRename={handleRenameColumn}
+                  onAddCard={handleAddCard}
+                  onEditCard={handleEditCard}
+                  onDeleteCard={handleDeleteCard}
+                />
+              ))}
+            </section>
+          </main>
           <DragOverlay>
             {activeCard ? (
-              <div className="w-[260px]">
-                <KanbanCardPreview card={activeCard} />
+              <div className="w-[240px]">
+                <KanbanCardPreview
+                  card={activeCard}
+                  accent={columnAccent(
+                    activeColumnIndex === undefined || activeColumnIndex < 0
+                      ? 0
+                      : activeColumnIndex
+                  )}
+                />
               </div>
             ) : null}
           </DragOverlay>
         </DndContext>
+
         {busy ? (
-          <p className="fixed bottom-6 left-6 rounded-full bg-[var(--navy-dark)] px-4 py-2 text-xs font-semibold text-white shadow-lg">
-            Saving...
-          </p>
+          <>
+            <div className="fixed inset-0 z-10 cursor-wait" />
+            <p className="pointer-events-none fixed bottom-5 left-5 z-20 flex items-center gap-2 rounded-full bg-[var(--navy-dark)] px-4 py-2 text-xs font-semibold text-white shadow-[var(--shadow)]">
+              <span className="h-2 w-2 animate-pulse rounded-full bg-[var(--accent-yellow)]" />
+              Saving...
+            </p>
+          </>
         ) : null}
-      </main>
+      </div>
+
       <ChatSidebar onBoardUpdate={setBoard} />
     </div>
   );

@@ -42,6 +42,27 @@ describe("KanbanBoard", () => {
     expect(await screen.findAllByTestId(/column-/i)).toHaveLength(5);
   });
 
+  it("summarizes progress in the header", async () => {
+    render(<KanbanBoard />);
+
+    expect(await screen.findByText("2 of 8 done")).toBeInTheDocument();
+    expect(screen.getByRole("progressbar", { name: "Cards done" })).toHaveAttribute(
+      "aria-valuenow",
+      "25"
+    );
+  });
+
+  it("shows the signed-in user and signs out from the header", async () => {
+    const onLogout = vi.fn();
+    render(<KanbanBoard user={{ username: "user" }} onLogout={onLogout} />);
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Sign out" })
+    );
+
+    expect(onLogout).toHaveBeenCalledOnce();
+  });
+
   it("renames a column", async () => {
     mockedRenameColumn.mockResolvedValue({
       ...structuredClone(initialData),

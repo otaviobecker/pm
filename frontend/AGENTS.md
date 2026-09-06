@@ -16,15 +16,17 @@ This directory contains the static Next.js frontend for the Project Management M
 - `src/app/layout.tsx` defines metadata and loads Space Grotesk and Manrope with `next/font`.
 - `src/app/page.tsx` renders the authenticated app as the only page.
 - `src/app/globals.css` defines global styles and the required color tokens.
-- `src/components/App.tsx` restores the session and owns sign-in and logout.
-- `src/components/KanbanBoard.tsx` loads server state and coordinates board API actions and drag-and-drop.
+- `src/components/App.tsx` restores the session, owns sign-in and logout, and hands the user and logout handler to the board.
+- `src/components/KanbanBoard.tsx` owns the full-height app shell (top bar, board region, docked chat), loads server state, and coordinates board API actions and drag-and-drop.
 - `src/components/ChatSidebar.tsx` owns session-only AI conversation state and applies returned board updates.
 - `src/components/KanbanColumn.tsx` renders a droppable column, editable title, cards, and new-card form.
-- `src/components/KanbanCard.tsx` renders a sortable card with delete behavior.
+- `src/components/KanbanCard.tsx` renders a sortable card with icon actions for drag, edit, and delete.
 - `src/components/KanbanCardPreview.tsx` renders the drag overlay.
 - `src/components/NewCardForm.tsx` manages local add-card form state.
+- `src/components/icons.tsx` holds the inline SVG icon set; there is no icon dependency.
 - `src/lib/api.ts` is the typed same-origin API client.
 - `src/lib/kanban.ts` defines board types, seed fixtures, and the pure `moveCard` operation.
+- `src/lib/theme.ts` maps a column's position to its presentation-only accent colors.
 - `src/lib/kanban.test.ts` tests card reordering and cross-column moves.
 - `src/components/KanbanBoard.test.tsx` tests rendering, column renaming, and card creation/deletion.
 - `tests/kanban.spec.ts` tests core flows in a browser.
@@ -39,10 +41,15 @@ This directory contains the static Next.js frontend for the Project Management M
 - Dragging uses a pointer sensor with a six-pixel activation distance and `closestCorners` collision detection.
 - AI conversation history remains in `ChatSidebar` memory and resets on page reload.
 - A structured board returned by chat replaces the visible board immediately.
+- The layout fills the viewport: a fixed-height top bar, one row of equal-width columns that scroll horizontally only when they no longer fit, and per-column vertical scrolling.
+- Card drag, edit, and delete are icon buttons that keep their existing accessible labels; edit and delete fade in on hover or focus and stay visible below 1024px.
+- The assistant opens from a docked rail button on large screens and a floating button on small ones, then takes a docked panel beside the board from `lg` up and a full-height overlay below it.
+- Chat sends on Enter and inserts a newline on Shift+Enter.
 
 ## Design conventions
 
-- Keep the required colors as CSS variables: yellow `#ecad0a`, blue `#209dd7`, purple `#753991`, navy `#032147`, and gray `#888888`.
+- Keep the required colors as CSS variables: yellow `#ecad0a`, blue `#209dd7`, purple `#753991`, navy `#032147`, and gray `#888888`. Column and card accents come from `columnAccent` in `src/lib/theme.ts` and use only those five values.
+- Use the inline icons in `src/components/icons.tsx` for actions instead of text buttons, and keep a descriptive `aria-label` on every icon-only control.
 - Prefer existing CSS variables and Tailwind utility classes over introducing another styling system.
 - Preserve accessible labels and stable `data-testid` values when changing tested interactions.
 - Keep board transformations immutable and place reusable pure board logic in `src/lib/kanban.ts`.

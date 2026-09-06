@@ -8,8 +8,11 @@
   --gray-text: #888888;
   --surface: #f7f8fb;
   --surface-strong: #ffffff;
+  --surface-muted: #eef1f7;
   --stroke: rgba(3, 33, 71, 0.08);
+  --stroke-strong: rgba(3, 33, 71, 0.16);
   --shadow: 0 18px 40px rgba(3, 33, 71, 0.12);
+  --shadow-soft: 0 6px 16px rgba(3, 33, 71, 0.06);
 }
 
 @theme inline {
@@ -22,13 +25,68 @@
   box-sizing: border-box;
 }
 
+html,
+body {
+  height: 100%;
+}
+
 body {
   background: var(--surface);
   color: var(--navy-dark);
   font-family: var(--font-body), "Segoe UI", sans-serif;
   margin: 0;
+  overscroll-behavior: none;
 }
 
 .font-display {
   font-family: var(--font-display), "Segoe UI", sans-serif;
+}
+
+/* Slim scrollbars so column and chat scroll areas do not eat horizontal space. */
+.scroll-slim {
+  scrollbar-width: thin;
+  scrollbar-color: var(--stroke-strong) transparent;
+}
+
+.scroll-slim::-webkit-scrollbar {
+  width: 8px;
+  height: 10px;
+}
+
+.scroll-slim::-webkit-scrollbar-thumb {
+  background-color: var(--stroke-strong);
+  border: 2px solid transparent;
+  background-clip: content-box;
+  border-radius: 999px;
+}
+
+.scroll-slim::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Shared square icon-button sizing for card, column, and chat actions. */
+.icon-button {
+  display: inline-grid;
+  place-items: center;
+  height: 28px;
+  width: 28px;
+  border-radius: 9px;
+  color: var(--gray-text);
+  transition: color 120ms ease, background-color 120ms ease,
+    transform 120ms ease;
+}
+
+.icon-button:hover {
+  background-color: var(--surface-muted);
+  color: var(--navy-dark);
+}
+
+.icon-button:focus-visible {
+  outline: 2px solid var(--primary-blue);
+  outline-offset: 1px;
+}
+
+.icon-button-danger:hover {
+  background-color: rgba(190, 18, 60, 0.1);
+  color: #be123c;
 }
