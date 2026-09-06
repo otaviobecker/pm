@@ -295,7 +295,7 @@ def seed_default_admin() -> None:
             (user_id,),
         ).fetchone()
         if already_seeded is None:
-            seed_starter_board(connection, user_id, with_sample_cards=True)
+            seed_starter_board(connection, user_id)
 
 
 def create_default_columns(connection: sqlite3.Connection, board_id: int) -> None:
@@ -308,13 +308,8 @@ def create_default_columns(connection: sqlite3.Connection, board_id: int) -> Non
     )
 
 
-def seed_starter_board(
-    connection: sqlite3.Connection,
-    user_id: int,
-    *,
-    with_sample_cards: bool,
-) -> int:
-    """Create a board owned by ``user_id`` with the default columns."""
+def seed_starter_board(connection: sqlite3.Connection, user_id: int) -> int:
+    """Create a board owned by ``user_id``, with the default columns and demo cards."""
     timestamp = now()
     board_id = connection.execute(
         """
@@ -328,9 +323,6 @@ def seed_starter_board(
         (board_id, user_id, timestamp),
     )
     create_default_columns(connection, board_id)
-    if not with_sample_cards:
-        return board_id
-
     positions: dict[str, int] = {}
     for index, (column_id, title, details, priority) in enumerate(SEED_CARDS, start=1):
         position = positions.get(column_id, 0)

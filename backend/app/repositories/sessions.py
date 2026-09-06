@@ -1,6 +1,5 @@
 """Server-side sessions persisted in SQLite so sign-in survives a restart."""
 
-import sqlite3
 from contextlib import closing
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -81,23 +80,10 @@ def destroy(token: str | None) -> None:
         )
 
 
-def destroy_all_for_user(user_id: int) -> int:
-    with transaction() as connection:
-        result = connection.execute(
-            "DELETE FROM sessions WHERE user_id = ?",
-            (user_id,),
-        )
-    return result.rowcount
-
-
-def prune_expired(connection: sqlite3.Connection | None = None) -> int:
+def prune_expired() -> int:
     """Delete sessions whose expiry has passed."""
-    timestamp = datetime.now(UTC).isoformat()
-    if connection is not None:
+    with transaction() as connection:
         return connection.execute(
-            "DELETE FROM sessions WHERE expires_at <= ?", (timestamp,)
-        ).rowcount
-    with transaction() as owned:
-        return owned.execute(
-            "DELETE FROM sessions WHERE expires_at <= ?", (timestamp,)
+            "DELETE FROM sessions WHERE expires_at <= ?",
+            (datetime.now(UTC).isoformat(),),
         ).rowcount

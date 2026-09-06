@@ -54,11 +54,6 @@ def require(connection: sqlite3.Connection, user_id: int) -> sqlite3.Row:
     return row
 
 
-def get(user_id: int) -> dict[str, Any]:
-    with closing(connect()) as connection:
-        return serialize(require(connection, user_id))
-
-
 def create(
     username: str,
     password: str,
@@ -74,28 +69,25 @@ def create(
         if find_by_username(connection, username) is not None:
             raise ConflictError("That username is already taken")
         timestamp = now()
-        try:
-            user_id = connection.execute(
-                """
-                INSERT INTO users
-                    (username, display_name, email, password_hash, role, is_active,
-                     created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, 1, ?, ?)
-                """,
-                (
-                    username,
-                    display_name,
-                    email.strip(),
-                    security.hash_password(password),
-                    role,
-                    timestamp,
-                    timestamp,
-                ),
-            ).lastrowid
-        except sqlite3.IntegrityError as exception:
-            raise ConflictError("That username is already taken") from exception
+        user_id = connection.execute(
+            """
+            INSERT INTO users
+                (username, display_name, email, password_hash, role, is_active,
+                 created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, 1, ?, ?)
+            """,
+            (
+                username,
+                display_name,
+                email.strip(),
+                security.hash_password(password),
+                role,
+                timestamp,
+                timestamp,
+            ),
+        ).lastrowid
         if with_starter_board:
-            seed_starter_board(connection, user_id, with_sample_cards=True)
+            seed_starter_board(connection, user_id)
         return serialize(require(connection, user_id))
 
 
@@ -145,8 +137,6 @@ def change_password(user_id: int, current_password: str, new_password: str) -> N
             "SELECT password_hash FROM users WHERE id = ?",
             (user_id,),
         ).fetchone()
-        if row is None:
-            raise NotFoundError("User not found")
         if not security.verify_password(current_password, row["password_hash"]):
             raise InvalidRequestError("Current password is incorrect")
         connection.execute(

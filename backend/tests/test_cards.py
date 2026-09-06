@@ -307,3 +307,15 @@ def test_concurrent_card_creation_keeps_positions_unique(
     assert not errors, errors
     backlog_ids = board_of(admin, board_id)["columns"][0]["cardIds"]
     assert len(backlog_ids) == len(set(backlog_ids)) == 2 + thread_count
+
+
+def test_an_empty_update_leaves_the_card_untouched(
+    admin: TestClient, board_id: int
+) -> None:
+    before = board_of(admin, board_id)
+    card_id = before["columns"][0]["cardIds"][0]
+
+    response = admin.patch(f"/api/boards/{board_id}/cards/{card_id}", json={})
+
+    assert response.status_code == 200
+    assert response.json()["cards"][card_id] == before["cards"][card_id]

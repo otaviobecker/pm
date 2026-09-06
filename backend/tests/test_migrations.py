@@ -197,3 +197,32 @@ def test_card_positions_stay_dense_and_zero_based(admin: TestClient, board_id: i
         by_column.setdefault(row["column_id"], []).append(row["position"])
     for positions in by_column.values():
         assert positions == list(range(len(positions)))
+
+
+def test_upgrading_an_already_current_database_does_nothing(client: TestClient) -> None:
+    with closing(database.connect(foreign_keys=False)) as connection:
+        assert (
+            database.upgrade(connection, 0) == database.SCHEMA_VERSION
+        )
+
+    assert client.get("/api/health").status_code == 200
+
+
+def test_a_failing_migration_leaves_the_version_alone(
+    isolated_database, monkeypatch
+) -> None:
+    build_v1_database()
+
+    def explode(_):
+        raise RuntimeError("migration blew up")
+
+    monkeypatch.setitem(database.MIGRATIONS, 1, explode)
+
+    with pytest.raises(RuntimeError, match="migration blew up"):
+        database.initialize_database()
+
+    with closing(database.connect()) as connection:
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 1
+        assert connection.execute(
+            "SELECT title FROM boards WHERE id = 1"
+        ).fetchone()["title"] == "Legacy board"

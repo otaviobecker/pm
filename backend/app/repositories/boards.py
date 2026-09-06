@@ -136,8 +136,6 @@ def read(connection: sqlite3.Connection, board_id: int, viewer_role: str) -> dic
         "FROM boards WHERE id = ?",
         (board_id,),
     ).fetchone()
-    if board is None:
-        raise NotFoundError("Board not found")
     columns, cards = read_columns_and_cards(connection, board_id)
     return {
         "id": board["id"],
@@ -258,8 +256,6 @@ def delete(user_id: int, board_id: int) -> None:
 def add_member(user_id: int, board_id: int, username: str, role: str) -> dict[str, Any]:
     with transaction() as connection:
         require_access(connection, user_id, board_id, minimum="owner")
-        if role == "owner":
-            raise InvalidRequestError("A board has exactly one owner")
         member = connection.execute(
             "SELECT id, is_active FROM users WHERE lower(username) = lower(?)",
             (username.strip(),),
@@ -280,8 +276,6 @@ def update_member(
 ) -> dict[str, Any]:
     with transaction() as connection:
         require_access(connection, user_id, board_id, minimum="owner")
-        if role == "owner":
-            raise InvalidRequestError("A board has exactly one owner")
         current = membership_role(connection, member_id, board_id)
         if current is None:
             raise NotFoundError("Board member not found")

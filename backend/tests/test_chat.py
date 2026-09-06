@@ -337,3 +337,21 @@ def test_live_structured_chat(admin: TestClient, board_id: int) -> None:
     assert response.status_code == 200
     assert response.json()["message"]
     assert response.json()["board"] is None
+
+
+def test_the_assistant_can_clear_every_card(
+    admin: TestClient, board_id: int, monkeypatch
+) -> None:
+    board = admin.get(f"/api/boards/{board_id}").json()
+    for column in board["columns"]:
+        column["cardIds"] = []
+    board["cards"] = {}
+    reply_with(monkeypatch, {"message": "Cleared the board.", "board": structured_board(board)})
+
+    response = admin.post(
+        f"/api/boards/{board_id}/chat",
+        json={"message": "Delete everything", "history": []},
+    )
+
+    assert response.status_code == 200
+    assert admin.get(f"/api/boards/{board_id}").json()["cards"] == {}

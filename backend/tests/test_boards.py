@@ -286,3 +286,39 @@ def test_deleting_a_shared_board_removes_it_for_everyone(
 
     assert member.get(f"/api/boards/{board_id}").status_code == 404
     assert only_board_id(member) != board_id
+
+
+def test_changing_the_role_of_a_non_member_is_a_404(
+    admin: TestClient, board_id: int, make_client
+) -> None:
+    outsider = register(make_client(), "casey")
+
+    response = admin.patch(
+        f"/api/boards/{board_id}/members/{outsider['id']}", json={"role": "viewer"}
+    )
+
+    assert response.status_code == 404
+
+
+def test_removing_a_non_member_is_a_404(admin: TestClient, board_id: int) -> None:
+    assert admin.delete(f"/api/boards/{board_id}/members/9999").status_code == 404
+
+
+def test_an_editor_cannot_remove_someone_else(
+    admin: TestClient, board_id: int, make_client
+) -> None:
+    editor = make_client()
+    register(editor, "casey")
+    admin.post(
+        f"/api/boards/{board_id}/members", json={"username": "casey", "role": "editor"}
+    )
+    viewer = make_client()
+    stranger = register(viewer, "dana")
+    admin.post(
+        f"/api/boards/{board_id}/members", json={"username": "dana", "role": "viewer"}
+    )
+
+    response = editor.delete(f"/api/boards/{board_id}/members/{stranger['id']}")
+
+    assert response.status_code == 403
+    assert viewer.get(f"/api/boards/{board_id}").status_code == 200
