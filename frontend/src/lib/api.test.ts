@@ -22,8 +22,20 @@ import {
   removeBoardMember,
   renameColumn,
   sendChat,
+  addChecklistItem,
+  addComment,
   administerUser,
   changePassword,
+  createLabel,
+  deleteChecklistItem,
+  deleteComment,
+  deleteLabel,
+  editComment,
+  getCard,
+  moveChecklistItem,
+  setCardLabels,
+  updateChecklistItem,
+  updateLabel,
   updateBoard,
   updateBoardMember,
   updateColumn,
@@ -267,5 +279,82 @@ describe("endpoint shapes", () => {
 
     await deleteUser(2);
     expect([url(), method()]).toEqual(["/api/admin/users/2", "DELETE"]);
+  });
+
+  it("builds the label and card detail requests", async () => {
+    const spy = stubFetch(respond({}));
+    const method = () => lastCall(spy)[1]?.method;
+    const url = () => lastCall(spy)[0];
+    const body = () => JSON.parse(lastCall(spy)[1]?.body as string);
+
+    await createLabel(1, "Blocked", "navy");
+    expect([url(), body()]).toEqual([
+      "/api/boards/1/labels",
+      { name: "Blocked", color: "navy" },
+    ]);
+
+    await updateLabel(1, "label-a", { color: "yellow" });
+    expect([url(), method(), body()]).toEqual([
+      "/api/boards/1/labels/label-a",
+      "PATCH",
+      { color: "yellow" },
+    ]);
+
+    await deleteLabel(1, "label-a");
+    expect([url(), method()]).toEqual(["/api/boards/1/labels/label-a", "DELETE"]);
+
+    await getCard(1, "card-1");
+    expect(url()).toBe("/api/boards/1/cards/card-1");
+
+    await setCardLabels(1, "card-1", ["label-a"]);
+    expect([url(), method(), body()]).toEqual([
+      "/api/boards/1/cards/card-1/labels",
+      "PUT",
+      { labelIds: ["label-a"] },
+    ]);
+
+    await addComment(1, "card-1", "Hello");
+    expect([url(), body()]).toEqual([
+      "/api/boards/1/cards/card-1/comments",
+      { body: "Hello" },
+    ]);
+
+    await editComment(1, "card-1", 3, "Updated");
+    expect([url(), method(), body()]).toEqual([
+      "/api/boards/1/cards/card-1/comments/3",
+      "PATCH",
+      { body: "Updated" },
+    ]);
+
+    await deleteComment(1, "card-1", 3);
+    expect([url(), method()]).toEqual([
+      "/api/boards/1/cards/card-1/comments/3",
+      "DELETE",
+    ]);
+
+    await addChecklistItem(1, "card-1", "Draft");
+    expect([url(), body()]).toEqual([
+      "/api/boards/1/cards/card-1/checklist",
+      { title: "Draft" },
+    ]);
+
+    await updateChecklistItem(1, "card-1", 4, { done: true });
+    expect([url(), method(), body()]).toEqual([
+      "/api/boards/1/cards/card-1/checklist/4",
+      "PATCH",
+      { done: true },
+    ]);
+
+    await moveChecklistItem(1, "card-1", 4, 2);
+    expect([url(), body()]).toEqual([
+      "/api/boards/1/cards/card-1/checklist/4/move",
+      { position: 2 },
+    ]);
+
+    await deleteChecklistItem(1, "card-1", 4);
+    expect([url(), method()]).toEqual([
+      "/api/boards/1/cards/card-1/checklist/4",
+      "DELETE",
+    ]);
   });
 });

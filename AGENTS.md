@@ -9,7 +9,9 @@ This project is building a Project Management App. Key features:
 - A board can be shared with editors and viewers, archived, and deleted by its owner
 - A board's columns can be renamed, added, reordered, deleted, and given a work-in-progress limit
 - Cards can be created, edited, deleted, moved with drag and drop, and carry a priority, due date, and assignee
-- The board can be filtered by text, priority, and assignee
+- A card opens into a detail view with labels, an ordered checklist, and a comment thread
+- Labels belong to a board, in the product's five colors, and any member can comment
+- The board can be filtered by text, priority, assignee, and label
 - There is an AI chat feature in a sidebar; the AI is able to create / edit / move one or more cards on the open board
 
 ## Limitations

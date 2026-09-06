@@ -5,15 +5,24 @@ import {
   ApiError,
   addBoardMember,
   createBoard,
+  createLabel,
   deleteBoard,
+  deleteLabel,
   getAllUsers,
   getBoard,
   getBoards,
+  getCard,
   getDirectory,
   updateBoard,
+  updateLabel,
   updateProfile,
 } from "@/lib/api";
-import { makeBoard, makeSummary, makeUser } from "@/test/fixtures";
+import {
+  makeBoard,
+  makeCardDetail,
+  makeSummary,
+  makeUser,
+} from "@/test/fixtures";
 
 vi.mock("@/lib/api", async () => {
   const actual = await vi.importActual<typeof import("@/lib/api")>("@/lib/api");
@@ -27,6 +36,11 @@ vi.mock("@/lib/api", async () => {
     updateBoard: vi.fn(),
     deleteBoard: vi.fn(),
     addBoardMember: vi.fn(),
+    createLabel: vi.fn(),
+    updateLabel: vi.fn(),
+    deleteLabel: vi.fn(),
+    getCard: vi.fn(),
+    addComment: vi.fn(),
     updateProfile: vi.fn(),
     createCard: vi.fn(),
     editCard: vi.fn(),
@@ -69,6 +83,7 @@ beforeEach(() => {
     { id: 2, username: "casey", displayName: "Casey Jones" },
   ]);
   vi.mocked(getAllUsers).mockResolvedValue([]);
+  vi.mocked(getCard).mockResolvedValue(makeCardDetail());
 });
 
 describe("Workspace boards", () => {
@@ -286,5 +301,147 @@ describe("Account dialog", () => {
 
     expect(screen.queryByText(/workspace accounts/i)).toBeNull();
     expect(getAllUsers).not.toHaveBeenCalled();
+  });
+});
+
+describe("Card details", () => {
+  it("opens a card and shows its detail", async () => {
+    vi.mocked(getCard).mockResolvedValue(
+      makeCardDetail({
+        comments: [
+          {
+            id: 1,
+            body: "Needs a decision",
+            authorId: 1,
+            authorName: "Workspace Admin",
+            createdAt: "2026-01-01T00:00:00+00:00",
+            updatedAt: "2026-01-01T00:00:00+00:00",
+          },
+        ],
+      })
+    );
+    renderWorkspace();
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Open Align roadmap themes" })
+    );
+
+    expect(getCard).toHaveBeenCalledWith(1, "card-1");
+    const dialog = await screen.findByRole("dialog", {
+      name: "Align roadmap themes",
+    });
+    expect(within(dialog).getByText("Needs a decision")).toBeInTheDocument();
+  });
+
+  it("closes the card detail", async () => {
+    renderWorkspace();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Open Align roadmap themes" })
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: "Align roadmap themes",
+    });
+
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: /close dialog/i })
+    );
+
+    expect(
+      screen.queryByRole("dialog", { name: "Align roadmap themes" })
+    ).toBeNull();
+  });
+
+  it("reports a card that cannot be opened", async () => {
+    vi.mocked(getCard).mockRejectedValue(new ApiError(404, "Card not found"));
+    renderWorkspace();
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Open Align roadmap themes" })
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Card not found");
+  });
+});
+
+describe("Board labels", () => {
+  const openSettings = async () => {
+    await userEvent.click(
+      await screen.findByRole("button", { name: /board settings/i })
+    );
+    return screen.findByRole("dialog", { name: /board settings/i });
+  };
+
+  it("adds a label", async () => {
+    vi.mocked(createLabel).mockResolvedValue(makeBoard());
+    renderWorkspace();
+    const dialog = await openSettings();
+
+    await userEvent.type(
+      within(dialog).getByLabelText("New label name"),
+      "Blocked"
+    );
+    await userEvent.selectOptions(
+      within(dialog).getByLabelText("New label color"),
+      "navy"
+    );
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: /add label/i })
+    );
+
+    expect(createLabel).toHaveBeenCalledWith(1, "Blocked", "navy");
+  });
+
+  it("recolors an existing label", async () => {
+    vi.mocked(updateLabel).mockResolvedValue(makeBoard());
+    renderWorkspace();
+    const dialog = await openSettings();
+
+    await userEvent.selectOptions(
+      within(dialog).getByLabelText("Color for Bug"),
+      "yellow"
+    );
+
+    expect(updateLabel).toHaveBeenCalledWith(1, "label-bug", {
+      color: "yellow",
+    });
+  });
+
+  it("renames a label on blur", async () => {
+    vi.mocked(updateLabel).mockResolvedValue(makeBoard());
+    renderWorkspace();
+    const dialog = await openSettings();
+
+    const field = within(dialog).getByLabelText("Name for Bug");
+    await userEvent.clear(field);
+    await userEvent.type(field, "Defect");
+    await userEvent.tab();
+
+    expect(updateLabel).toHaveBeenCalledWith(1, "label-bug", {
+      name: "Defect",
+    });
+  });
+
+  it("deletes a label", async () => {
+    vi.mocked(deleteLabel).mockResolvedValue(makeBoard());
+    renderWorkspace();
+    const dialog = await openSettings();
+
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Delete label Bug" })
+    );
+
+    expect(deleteLabel).toHaveBeenCalledWith(1, "label-bug");
+  });
+
+  it("hides label editing from viewers", async () => {
+    vi.mocked(getBoard).mockResolvedValue(makeBoard({ role: "viewer" }));
+    renderWorkspace();
+    const dialog = await openSettings();
+
+    expect(within(dialog).queryByLabelText("New label name")).toBeNull();
+    expect(
+      within(dialog).queryByRole("button", { name: "Delete label Bug" })
+    ).toBeNull();
+    expect(within(dialog).getByLabelText("Name for Bug")).toBeDisabled();
   });
 });

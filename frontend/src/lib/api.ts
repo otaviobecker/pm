@@ -3,6 +3,8 @@ import type {
   BoardData,
   BoardRole,
   BoardSummary,
+  CardDetail,
+  LabelColor,
   Priority,
 } from "@/lib/kanban";
 
@@ -39,6 +41,12 @@ export type CardFields = {
   priority?: Priority;
   dueDate?: string | null;
   assigneeId?: number | null;
+};
+
+/** A card detail mutation also returns the board whose rollups it changed. */
+export type CardWorkspace = {
+  card: CardDetail;
+  board: BoardData;
 };
 
 export class ApiError extends Error {
@@ -286,3 +294,106 @@ export const sendChat = (
     method: "POST",
     body: JSON.stringify({ message, history }),
   });
+
+export const createLabel = (boardId: number, name: string, color: LabelColor) =>
+  request<BoardData>(`/api/boards/${boardId}/labels`, {
+    method: "POST",
+    body: JSON.stringify({ name, color }),
+  });
+
+export const updateLabel = (
+  boardId: number,
+  labelId: string,
+  changes: { name?: string; color?: LabelColor }
+) =>
+  request<BoardData>(`/api/boards/${boardId}/labels/${labelId}`, {
+    method: "PATCH",
+    body: JSON.stringify(changes),
+  });
+
+export const deleteLabel = (boardId: number, labelId: string) =>
+  request<BoardData>(`/api/boards/${boardId}/labels/${labelId}`, {
+    method: "DELETE",
+  });
+
+export const getCard = (boardId: number, cardId: string) =>
+  request<CardDetail>(`/api/boards/${boardId}/cards/${cardId}`);
+
+export const setCardLabels = (
+  boardId: number,
+  cardId: string,
+  labelIds: string[]
+) =>
+  request<CardWorkspace>(`/api/boards/${boardId}/cards/${cardId}/labels`, {
+    method: "PUT",
+    body: JSON.stringify({ labelIds }),
+  });
+
+export const addComment = (boardId: number, cardId: string, body: string) =>
+  request<CardWorkspace>(`/api/boards/${boardId}/cards/${cardId}/comments`, {
+    method: "POST",
+    body: JSON.stringify({ body }),
+  });
+
+export const editComment = (
+  boardId: number,
+  cardId: string,
+  commentId: number,
+  body: string
+) =>
+  request<CardWorkspace>(
+    `/api/boards/${boardId}/cards/${cardId}/comments/${commentId}`,
+    { method: "PATCH", body: JSON.stringify({ body }) }
+  );
+
+export const deleteComment = (
+  boardId: number,
+  cardId: string,
+  commentId: number
+) =>
+  request<CardWorkspace>(
+    `/api/boards/${boardId}/cards/${cardId}/comments/${commentId}`,
+    { method: "DELETE" }
+  );
+
+export const addChecklistItem = (
+  boardId: number,
+  cardId: string,
+  title: string
+) =>
+  request<CardWorkspace>(`/api/boards/${boardId}/cards/${cardId}/checklist`, {
+    method: "POST",
+    body: JSON.stringify({ title }),
+  });
+
+export const updateChecklistItem = (
+  boardId: number,
+  cardId: string,
+  itemId: number,
+  changes: { title?: string; done?: boolean }
+) =>
+  request<CardWorkspace>(
+    `/api/boards/${boardId}/cards/${cardId}/checklist/${itemId}`,
+    { method: "PATCH", body: JSON.stringify(changes) }
+  );
+
+export const moveChecklistItem = (
+  boardId: number,
+  cardId: string,
+  itemId: number,
+  position: number
+) =>
+  request<CardWorkspace>(
+    `/api/boards/${boardId}/cards/${cardId}/checklist/${itemId}/move`,
+    { method: "POST", body: JSON.stringify({ position }) }
+  );
+
+export const deleteChecklistItem = (
+  boardId: number,
+  cardId: string,
+  itemId: number
+) =>
+  request<CardWorkspace>(
+    `/api/boards/${boardId}/cards/${cardId}/checklist/${itemId}`,
+    { method: "DELETE" }
+  );

@@ -320,14 +320,46 @@ deployment, and session-only chat history.
 - An existing version 1 database keeps its data after upgrading.
 - Backend statement coverage stays above 95 percent and all suites pass.
 
+
+## Part 12: Turn a card into a work item
+
+### Implementation
+
+- [x] Add schema version 3 with `labels`, `card_labels`, `card_comments`, and `checklist_items`, upgrading existing databases in place.
+- [x] Give every board up to 20 labels in the product's five colors, seeded with four defaults.
+- [x] Attach labels to cards, and detach them everywhere when a label is deleted.
+- [x] Add a comment thread per card: any member may comment, the author may edit, and the author or board owner may delete.
+- [x] Add an ordered checklist per card, with reordering and completion.
+- [x] Roll comment and checklist counts up onto the board projection so the card face can show progress.
+- [x] Return both the refreshed card and the refreshed board from every card detail mutation.
+- [x] Reconcile cards in place during an assistant update so labels, comments, and checklists survive.
+- [x] Make each migration build the schema of the version it upgrades to, not today's schema.
+- [x] Add a card detail dialog, label management in board settings, card-face chips, and a label filter.
+
+### Tests
+
+- [x] Cover label creation, renaming, recoloring, deletion, the cap, and detaching from cards.
+- [x] Cover comment permissions for authors, editors, viewers, and the board owner.
+- [x] Cover checklist creation, completion, renaming, reordering, deletion, and dense positions.
+- [x] Cover the version 2 to version 3 migration against a database built with the old schema.
+- [x] Cover that an assistant edit preserves a surviving card's labels, comments, and checklist.
+- [x] Add unit tests for the card detail dialog, the card face chips, and label management.
+- [x] Add browser tests for checklists, comment threads, labelling, label management, and detail editing.
+
+### Success criteria
+
+- A card holds everything a work item needs without leaving the board.
+- An assistant edit never silently discards work attached to a card.
+- An existing version 2 database keeps its data and gains the default labels.
+- Backend statement coverage stays at 100 percent and all suites pass.
+
 ## Next candidates
 
 Not started, in rough order of value to the product:
 
-- Card comments and a per-board activity feed (schema version 3).
-- Labels on cards, filterable alongside priority and assignee.
-- Checklists on a card, with a completion count on the card face.
-- A card detail view, so long descriptions and future card metadata are not
-  edited inside the column.
-- A cross-board "my work" view of everything assigned to the signed-in user.
-- Board templates, so a new board can start from a saved column set.
+- A per-board activity feed recording who changed what.
+- A cross-board "my work" view of everything assigned to the signed-in user,
+  with an overdue and due-soon grouping.
+- Board templates, so a new board can start from a saved column and label set.
+- Card attachments or links.
+- Keyboard navigation across the board, and a command palette.

@@ -14,7 +14,14 @@ import {
 import { KanbanCard } from "@/components/KanbanCard";
 import { NewCardForm } from "@/components/NewCardForm";
 import type { CardFields } from "@/lib/api";
-import { wipState, type BoardMember, type Card, type Column } from "@/lib/kanban";
+import {
+  labelsFor,
+  wipState,
+  type BoardData,
+  type BoardMember,
+  type Card,
+  type Column,
+} from "@/lib/kanban";
 import type { ColumnAccent } from "@/lib/theme";
 
 type KanbanColumnProps = {
@@ -27,6 +34,8 @@ type KanbanColumnProps = {
   draggable: boolean;
   members: BoardMember[];
   memberNames: Map<number, string>;
+  board: BoardData;
+  onOpenCard: (cardId: string) => void;
   otherColumns: Column[];
   canDelete: boolean;
   position: number;
@@ -49,6 +58,8 @@ export const KanbanColumn = ({
   draggable,
   members,
   memberNames,
+  board,
+  onOpenCard,
   otherColumns,
   canDelete,
   position,
@@ -271,6 +282,8 @@ export const KanbanColumn = ({
                   ? null
                   : memberNames.get(card.assigneeId) ?? null
               }
+              labels={labelsFor(board, card)}
+              onOpen={onOpenCard}
               onEdit={onEditCard}
               onDelete={onDeleteCard}
             />

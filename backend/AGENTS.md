@@ -5,8 +5,8 @@ The backend is a Python 3.14 FastAPI application managed with `uv`.
 ## Structure
 
 - `app/main.py` creates the FastAPI application, maps domain errors to HTTP responses, includes the routers, and mounts static files at `/`.
-- `app/routers/` holds the HTTP layer, one module per area: `auth` (register, login, logout, session), `users` (directory, profile, password, administration), `boards` (boards, members, columns), `cards`, and `chat`.
-- `app/repositories/` holds the data layer, one module per aggregate: `users`, `sessions`, `boards` (including membership and the board projection), `columns`, `cards`, and `board_updates` (the whole-board replacement used by the assistant).
+- `app/routers/` holds the HTTP layer, one module per area: `auth` (register, login, logout, session), `users` (directory, profile, password, administration), `boards` (boards, members, columns), `card_details` (labels, card labels, comments, checklists), `cards`, and `chat`.
+- `app/repositories/` holds the data layer, one module per aggregate: `users`, `sessions`, `boards` (including membership and the board projection), `columns`, `cards`, `labels`, `card_details` (the expanded card, its comments, and its checklist), and `board_updates` (the whole-board reconciliation used by the assistant).
 - `app/database.py` owns the connection helpers, the schema, numbered migrations, and first-run seeding.
 - `app/security.py` owns password hashing (PBKDF2-SHA256) and session token generation and digesting.
 - `app/auth.py` owns cookie settings, login throttling, and the `AuthenticatedUser` and `AdminUser` dependencies.
@@ -30,7 +30,9 @@ The backend is a Python 3.14 FastAPI application managed with `uv`.
 - Routers stay thin: they validate input, call one repository function, and return its result. Repositories own their own transactions.
 - Scope every board query through `boards.require_access`, which resolves the caller's membership role. A non-member gets `NotFoundError`, an under-privileged member gets `PermissionDeniedError`.
 - Rewrite positions through the high temporary range so a unique index is never violated mid-update.
-- Validate complete AI board updates before starting their write transaction.
+- Validate complete AI board updates before starting their write transaction, and reconcile cards in place so their labels, comments, and checklists survive.
+- A migration builds the schema of the version it upgrades to, not today's schema, so replaying history stays correct.
+- Card detail mutations return both the card and the board, because they change the rollups the board shows.
 
 ## Tests
 

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { AccountDialog } from "@/components/AccountDialog";
 import { BoardRail } from "@/components/BoardRail";
 import { BoardSettingsDialog } from "@/components/BoardSettingsDialog";
+import { CardDetailDialog } from "@/components/CardDetailDialog";
 import { ChatSidebar } from "@/components/ChatSidebar";
 import { KanbanBoard } from "@/components/KanbanBoard";
 import {
@@ -17,7 +18,9 @@ import {
   createBoard,
   getBoard,
   getBoards,
+  getCard,
   getDirectory,
+  type CardWorkspace,
   type DirectoryUser,
   type User,
 } from "@/lib/api";
@@ -26,6 +29,7 @@ import {
   initials,
   type BoardData,
   type BoardSummary,
+  type CardDetail,
 } from "@/lib/kanban";
 
 const ACTIVE_BOARD_KEY = "pm.activeBoardId";
@@ -67,6 +71,7 @@ export const Workspace = ({ user, onUserChange, onLogout }: WorkspaceProps) => {
   const [showArchived, setShowArchived] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
+  const [openCard, setOpenCard] = useState<CardDetail | null>(null);
 
   const describe = (caught: unknown, fallback: string) =>
     caught instanceof ApiError && caught.detail ? caught.detail : fallback;
@@ -148,6 +153,11 @@ export const Workspace = ({ user, onUserChange, onLogout }: WorkspaceProps) => {
         const next = await operation();
         setBoard(next);
         setActiveBoardId(next.id);
+        setOpenCard((current) =>
+          current && next.cards[current.id]
+            ? { ...current, ...next.cards[current.id] }
+            : null
+        );
         await refreshSummaries(showArchived);
         return true;
       } catch (caught) {
@@ -180,6 +190,40 @@ export const Workspace = ({ user, onUserChange, onLogout }: WorkspaceProps) => {
       }
     },
     [refreshSummaries, showArchived]
+  );
+
+  /** Runs a card detail mutation, which returns both the card and its board. */
+  const runCard = useCallback(
+    async (operation: () => Promise<CardWorkspace>) => {
+      setBusy(true);
+      setError("");
+      try {
+        const { card, board: nextBoard } = await operation();
+        setOpenCard(card);
+        setBoard(nextBoard);
+        return true;
+      } catch (caught) {
+        setError(describe(caught, "That change could not be applied."));
+        return false;
+      } finally {
+        setBusy(false);
+      }
+    },
+    []
+  );
+
+  const showCard = useCallback(
+    async (cardId: string) => {
+      if (activeBoardId === null) {
+        return;
+      }
+      try {
+        setOpenCard(await getCard(activeBoardId, cardId));
+      } catch (caught) {
+        setError(describe(caught, "That card could not be opened."));
+      }
+    },
+    [activeBoardId]
   );
 
   const membersById = useMemo(() => {
@@ -285,6 +329,7 @@ export const Workspace = ({ user, onUserChange, onLogout }: WorkspaceProps) => {
             memberNames={membersById}
             members={board.members}
             onRun={run}
+            onOpenCard={(cardId) => void showCard(cardId)}
           />
         ) : (
           <div className="grid flex-1 place-items-center px-6 text-center">
@@ -334,6 +379,18 @@ export const Workspace = ({ user, onUserChange, onLogout }: WorkspaceProps) => {
             }
             return ok;
           }}
+        />
+      ) : null}
+
+      {openCard && board ? (
+        <CardDetailDialog
+          card={openCard}
+          board={board}
+          currentUserId={user.id}
+          editable={editable}
+          onClose={() => setOpenCard(null)}
+          onRun={runCard}
+          onRunBoard={run}
         />
       ) : null}
 

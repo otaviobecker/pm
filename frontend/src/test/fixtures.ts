@@ -4,7 +4,9 @@ import type {
   BoardMember,
   BoardSummary,
   Card,
+  CardDetail,
   Column,
+  Label,
 } from "@/lib/kanban";
 
 const timestamp = "2026-01-01T00:00:00+00:00";
@@ -32,8 +34,28 @@ export const makeCard = (
   priority: "medium",
   dueDate: null,
   assigneeId: null,
+  labelIds: [],
+  commentCount: 0,
+  checklistTotal: 0,
+  checklistDone: 0,
   createdAt: timestamp,
   updatedAt: timestamp,
+  ...overrides,
+});
+
+export const makeLabels = (): Label[] => [
+  { id: "label-feature", name: "Feature", color: "blue" },
+  { id: "label-bug", name: "Bug", color: "purple" },
+];
+
+export const makeCardDetail = (
+  overrides: Partial<CardDetail> = {}
+): CardDetail => ({
+  ...makeCard("card-1", "Align roadmap themes"),
+  boardId: 1,
+  columnId: "col-backlog",
+  comments: [],
+  checklist: [],
   ...overrides,
 });
 
@@ -88,6 +110,7 @@ export const makeBoard = (overrides: Partial<BoardData> = {}): BoardData => {
     updatedAt: timestamp,
     columns,
     cards,
+    labels: makeLabels(),
     members: [makeMember()],
     ...overrides,
   };

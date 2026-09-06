@@ -6,8 +6,11 @@ import { CSS } from "@dnd-kit/utilities";
 import clsx from "clsx";
 import {
   CalendarIcon,
+  ChecklistIcon,
   CheckIcon,
   CloseIcon,
+  CommentIcon,
+  ExpandIcon,
   FlagIcon,
   GripIcon,
   PencilIcon,
@@ -15,6 +18,7 @@ import {
 } from "@/components/icons";
 import type { CardFields } from "@/lib/api";
 import {
+  checklistComplete,
   dueState,
   formatDueDate,
   initials,
@@ -22,9 +26,15 @@ import {
   priorityLabels,
   type BoardMember,
   type Card,
+  type Label,
   type Priority,
 } from "@/lib/kanban";
-import { dueAccent, priorityAccent, type ColumnAccent } from "@/lib/theme";
+import {
+  dueAccent,
+  labelAccent,
+  priorityAccent,
+  type ColumnAccent,
+} from "@/lib/theme";
 
 type KanbanCardProps = {
   card: Card;
@@ -33,6 +43,8 @@ type KanbanCardProps = {
   draggable: boolean;
   members: BoardMember[];
   assigneeName: string | null;
+  labels: Label[];
+  onOpen: (cardId: string) => void;
   onEdit: (cardId: string, fields: CardFields) => Promise<boolean>;
   onDelete: (cardId: string) => Promise<boolean>;
 };
@@ -49,6 +61,8 @@ export const KanbanCard = ({
   draggable,
   members,
   assigneeName,
+  labels,
+  onOpen,
   onEdit,
   onDelete,
 }: KanbanCardProps) => {
@@ -239,11 +253,38 @@ export const KanbanCard = ({
             <span className="w-5 shrink-0" aria-hidden />
           )}
           <div className="min-w-0 flex-1">
-            <h4 className="font-display text-sm font-semibold leading-snug break-words text-[var(--navy-dark)] max-[1024px]:pr-12">
-              {card.title}
-            </h4>
+            {labels.length > 0 ? (
+              <div className="mb-1 flex flex-wrap gap-1">
+                {labels.map((label) => (
+                  <span
+                    key={label.id}
+                    className="rounded-full px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.06em]"
+                    style={{
+                      backgroundColor: labelAccent[label.color].soft,
+                      color: labelAccent[label.color].color,
+                    }}
+                    aria-label={`Label ${label.name}`}
+                  >
+                    {label.name}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+            {/* The title is clickable, so its box has to stop short of the
+                action row above it; margin keeps the two from overlapping and
+                stealing each other's clicks, which padding would not. */}
+            <div className={editable ? "mr-20" : "mr-8"}>
+              <button
+                type="button"
+                onClick={() => onOpen(card.id)}
+                className="block w-full text-left font-display text-sm font-semibold leading-snug break-words text-[var(--navy-dark)] transition hover:text-[var(--primary-blue)]"
+                aria-label={`Open ${card.title}`}
+              >
+                {card.title}
+              </button>
+            </div>
             {card.details ? (
-              <p className="mt-1 text-xs leading-5 break-words text-[var(--gray-text)]">
+              <p className="mt-1 line-clamp-3 text-xs leading-5 break-words text-[var(--gray-text)]">
                 {card.details}
               </p>
             ) : null}
@@ -274,6 +315,31 @@ export const KanbanCard = ({
                   {formatDueDate(card.dueDate)}
                 </span>
               ) : null}
+              {card.checklistTotal > 0 ? (
+                <span
+                  className={clsx(
+                    chipClass,
+                    checklistComplete(card)
+                      ? "bg-[rgba(32,157,215,0.14)] text-[var(--primary-blue)]"
+                      : "bg-[var(--surface-muted)] text-[var(--gray-text)]"
+                  )}
+                  aria-label={`Checklist ${card.checklistDone} of ${card.checklistTotal} done`}
+                >
+                  <ChecklistIcon width={10} height={10} />
+                  {card.checklistDone}/{card.checklistTotal}
+                </span>
+              ) : null}
+              {card.commentCount > 0 ? (
+                <span
+                  className={clsx(chipClass, "bg-[var(--surface-muted)] text-[var(--gray-text)]")}
+                  aria-label={`${card.commentCount} comment${
+                    card.commentCount === 1 ? "" : "s"
+                  }`}
+                >
+                  <CommentIcon width={10} height={10} />
+                  {card.commentCount}
+                </span>
+              ) : null}
               {assigneeName ? (
                 <span
                   className="inline-flex items-center gap-1 rounded-full bg-[var(--surface-muted)] px-1.5 py-0.5 text-[10px] font-bold uppercase text-[var(--navy-dark)]"
@@ -285,8 +351,18 @@ export const KanbanCard = ({
               ) : null}
             </div>
           </div>
-          {editable ? (
-            <div className="absolute right-1.5 top-1.5 flex items-center gap-0.5 rounded-lg bg-white opacity-0 shadow-[0_2px_8px_rgba(3,33,71,0.10)] transition-opacity duration-150 group-focus-within:opacity-100 group-hover:opacity-100 max-[1024px]:opacity-100 max-[1024px]:shadow-none">
+          <div className="absolute right-1.5 top-1.5 flex items-center gap-0.5 rounded-lg bg-white opacity-0 shadow-[0_2px_8px_rgba(3,33,71,0.10)] transition-opacity duration-150 group-focus-within:opacity-100 group-hover:opacity-100 max-[1024px]:opacity-100 max-[1024px]:shadow-none">
+            <button
+              type="button"
+              onClick={() => onOpen(card.id)}
+              className="icon-button h-6 w-6"
+              aria-label={`Open details for ${card.title}`}
+              title="Open card"
+            >
+              <ExpandIcon width={14} height={14} />
+            </button>
+            {editable ? (
+              <>
               <button
                 type="button"
                 onClick={startEditing}
@@ -305,8 +381,9 @@ export const KanbanCard = ({
               >
                 <TrashIcon width={14} height={14} />
               </button>
-            </div>
-          ) : null}
+              </>
+            ) : null}
+          </div>
         </div>
       )}
     </article>

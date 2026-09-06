@@ -181,3 +181,34 @@ export const KeyIcon = (props: IconProps) => (
     <path d="M11 11l9-9 2 2-2 2 2 2-3 3-2-2-2 2z" />
   </svg>
 );
+
+export const TagIcon = (props: IconProps) => (
+  <svg {...sized(props)}>
+    <path d="M3 12V4a1 1 0 011-1h8l9 9-9 9z" />
+    <circle cx="7.5" cy="7.5" r="1.3" fill="currentColor" stroke="none" />
+  </svg>
+);
+
+export const CommentIcon = (props: IconProps) => (
+  <svg {...sized(props)}>
+    <path d="M21 12a8 8 0 01-8 8H7l-4 3v-5.5A8 8 0 1121 12z" />
+  </svg>
+);
+
+export const ChecklistIcon = (props: IconProps) => (
+  <svg {...sized(props)}>
+    <path d="M4 7l2 2 3.5-3.5M4 17l2 2 3.5-3.5M13 7h7M13 17h7" />
+  </svg>
+);
+
+export const ExpandIcon = (props: IconProps) => (
+  <svg {...sized(props)}>
+    <path d="M9 4H4v5M15 20h5v-5M4 4l6 6M20 20l-6-6" />
+  </svg>
+);
+
+export const ChevronUpIcon = (props: IconProps) => (
+  <svg {...sized(props)}>
+    <path d="M6 15l6-6 6 6" />
+  </svg>
+);

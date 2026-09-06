@@ -1,5 +1,5 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "database": {
     "engine": "SQLite",
     "file": "${DATA_DIR}/pm.db",
@@ -7,162 +7,738 @@
       "foreign_keys": "ON",
       "journal_mode": "WAL",
       "busy_timeout_ms": 5000,
-      "user_version": 2
+      "user_version": 3
     }
   },
   "tables": {
     "users": {
       "purpose": "Application accounts. Each account owns boards and may be a member of others.",
       "columns": {
-        "id": { "type": "INTEGER", "primary_key": true, "auto_increment": true },
-        "username": { "type": "TEXT", "nullable": false },
-        "display_name": { "type": "TEXT", "nullable": false },
-        "email": { "type": "TEXT", "nullable": false, "default": "" },
+        "id": {
+          "type": "INTEGER",
+          "primary_key": true,
+          "auto_increment": true
+        },
+        "username": {
+          "type": "TEXT",
+          "nullable": false
+        },
+        "display_name": {
+          "type": "TEXT",
+          "nullable": false
+        },
+        "email": {
+          "type": "TEXT",
+          "nullable": false,
+          "default": ""
+        },
         "password_hash": {
           "type": "TEXT",
           "nullable": false,
           "format": "pbkdf2_sha256$iterations$salt_hex$digest_hex"
         },
-        "role": { "type": "TEXT", "nullable": false, "default": "member" },
-        "is_active": { "type": "INTEGER", "nullable": false, "default": 1 },
-        "created_at": { "type": "TEXT", "nullable": false, "format": "UTC ISO 8601" },
-        "updated_at": { "type": "TEXT", "nullable": false, "format": "UTC ISO 8601" }
+        "role": {
+          "type": "TEXT",
+          "nullable": false,
+          "default": "member"
+        },
+        "is_active": {
+          "type": "INTEGER",
+          "nullable": false,
+          "default": 1
+        },
+        "created_at": {
+          "type": "TEXT",
+          "nullable": false,
+          "format": "UTC ISO 8601"
+        },
+        "updated_at": {
+          "type": "TEXT",
+          "nullable": false,
+          "format": "UTC ISO 8601"
+        }
       },
       "constraints": [
-        { "type": "unique", "columns": ["username"] },
-        { "type": "unique_index", "name": "users_username_folded", "expression": "lower(username)" },
-        { "type": "check", "expression": "length(trim(username)) > 0" },
-        { "type": "check", "expression": "length(trim(display_name)) > 0" },
-        { "type": "check", "expression": "role IN ('admin', 'member')" },
-        { "type": "check", "expression": "is_active IN (0, 1)" }
+        {
+          "type": "unique",
+          "columns": [
+            "username"
+          ]
+        },
+        {
+          "type": "unique_index",
+          "name": "users_username_folded",
+          "expression": "lower(username)"
+        },
+        {
+          "type": "check",
+          "expression": "length(trim(username)) > 0"
+        },
+        {
+          "type": "check",
+          "expression": "length(trim(display_name)) > 0"
+        },
+        {
+          "type": "check",
+          "expression": "role IN ('admin', 'member')"
+        },
+        {
+          "type": "check",
+          "expression": "is_active IN (0, 1)"
+        }
       ]
     },
     "sessions": {
       "purpose": "Server-side sessions, so sign-in survives a backend restart. Only the token digest is stored.",
       "columns": {
-        "token_hash": { "type": "TEXT", "primary_key": true, "format": "sha256 hex of the cookie value" },
-        "user_id": { "type": "INTEGER", "nullable": false },
-        "created_at": { "type": "TEXT", "nullable": false, "format": "UTC ISO 8601" },
-        "expires_at": { "type": "TEXT", "nullable": false, "format": "UTC ISO 8601" }
+        "token_hash": {
+          "type": "TEXT",
+          "primary_key": true,
+          "format": "sha256 hex of the cookie value"
+        },
+        "user_id": {
+          "type": "INTEGER",
+          "nullable": false
+        },
+        "created_at": {
+          "type": "TEXT",
+          "nullable": false,
+          "format": "UTC ISO 8601"
+        },
+        "expires_at": {
+          "type": "TEXT",
+          "nullable": false,
+          "format": "UTC ISO 8601"
+        }
       },
       "constraints": [
         {
           "type": "foreign_key",
-          "columns": ["user_id"],
-          "references": { "table": "users", "columns": ["id"] },
+          "columns": [
+            "user_id"
+          ],
+          "references": {
+            "table": "users",
+            "columns": [
+              "id"
+            ]
+          },
           "on_delete": "CASCADE"
         }
       ],
-      "indexes": [{ "name": "sessions_user", "columns": ["user_id"] }]
+      "indexes": [
+        {
+          "name": "sessions_user",
+          "columns": [
+            "user_id"
+          ]
+        }
+      ]
     },
     "boards": {
       "purpose": "A Kanban board. An account may own any number of them.",
       "columns": {
-        "id": { "type": "INTEGER", "primary_key": true, "auto_increment": true },
-        "owner_id": { "type": "INTEGER", "nullable": false },
-        "name": { "type": "TEXT", "nullable": false },
-        "description": { "type": "TEXT", "nullable": false, "default": "" },
-        "archived": { "type": "INTEGER", "nullable": false, "default": 0 },
-        "created_at": { "type": "TEXT", "nullable": false, "format": "UTC ISO 8601" },
-        "updated_at": { "type": "TEXT", "nullable": false, "format": "UTC ISO 8601" }
+        "id": {
+          "type": "INTEGER",
+          "primary_key": true,
+          "auto_increment": true
+        },
+        "owner_id": {
+          "type": "INTEGER",
+          "nullable": false
+        },
+        "name": {
+          "type": "TEXT",
+          "nullable": false
+        },
+        "description": {
+          "type": "TEXT",
+          "nullable": false,
+          "default": ""
+        },
+        "archived": {
+          "type": "INTEGER",
+          "nullable": false,
+          "default": 0
+        },
+        "created_at": {
+          "type": "TEXT",
+          "nullable": false,
+          "format": "UTC ISO 8601"
+        },
+        "updated_at": {
+          "type": "TEXT",
+          "nullable": false,
+          "format": "UTC ISO 8601"
+        }
       },
       "constraints": [
         {
           "type": "foreign_key",
-          "columns": ["owner_id"],
-          "references": { "table": "users", "columns": ["id"] },
+          "columns": [
+            "owner_id"
+          ],
+          "references": {
+            "table": "users",
+            "columns": [
+              "id"
+            ]
+          },
           "on_delete": "CASCADE"
         },
-        { "type": "check", "expression": "length(trim(name)) > 0" },
-        { "type": "check", "expression": "archived IN (0, 1)" }
+        {
+          "type": "check",
+          "expression": "length(trim(name)) > 0"
+        },
+        {
+          "type": "check",
+          "expression": "archived IN (0, 1)"
+        }
       ],
-      "indexes": [{ "name": "boards_owner", "columns": ["owner_id"] }]
+      "indexes": [
+        {
+          "name": "boards_owner",
+          "columns": [
+            "owner_id"
+          ]
+        }
+      ]
     },
     "board_members": {
       "purpose": "Who can open a board, and with which capability. Every board has exactly one owner row.",
       "columns": {
-        "board_id": { "type": "INTEGER", "nullable": false },
-        "user_id": { "type": "INTEGER", "nullable": false },
-        "role": { "type": "TEXT", "nullable": false },
-        "created_at": { "type": "TEXT", "nullable": false, "format": "UTC ISO 8601" }
+        "board_id": {
+          "type": "INTEGER",
+          "nullable": false
+        },
+        "user_id": {
+          "type": "INTEGER",
+          "nullable": false
+        },
+        "role": {
+          "type": "TEXT",
+          "nullable": false
+        },
+        "created_at": {
+          "type": "TEXT",
+          "nullable": false,
+          "format": "UTC ISO 8601"
+        }
       },
       "constraints": [
-        { "type": "primary_key", "columns": ["board_id", "user_id"] },
+        {
+          "type": "primary_key",
+          "columns": [
+            "board_id",
+            "user_id"
+          ]
+        },
         {
           "type": "foreign_key",
-          "columns": ["board_id"],
-          "references": { "table": "boards", "columns": ["id"] },
+          "columns": [
+            "board_id"
+          ],
+          "references": {
+            "table": "boards",
+            "columns": [
+              "id"
+            ]
+          },
           "on_delete": "CASCADE"
         },
         {
           "type": "foreign_key",
-          "columns": ["user_id"],
-          "references": { "table": "users", "columns": ["id"] },
+          "columns": [
+            "user_id"
+          ],
+          "references": {
+            "table": "users",
+            "columns": [
+              "id"
+            ]
+          },
           "on_delete": "CASCADE"
         },
-        { "type": "check", "expression": "role IN ('owner', 'editor', 'viewer')" }
+        {
+          "type": "check",
+          "expression": "role IN ('owner', 'editor', 'viewer')"
+        }
       ],
-      "indexes": [{ "name": "board_members_user", "columns": ["user_id"] }]
+      "indexes": [
+        {
+          "name": "board_members_user",
+          "columns": [
+            "user_id"
+          ]
+        }
+      ]
     },
     "columns": {
       "purpose": "Ordered columns within one board. New boards start with five defaults, and columns can be added, renamed, reordered, and deleted.",
       "columns": {
-        "id": { "type": "TEXT", "nullable": false, "note": "Unique within the board" },
-        "board_id": { "type": "INTEGER", "nullable": false },
-        "title": { "type": "TEXT", "nullable": false },
-        "position": { "type": "INTEGER", "nullable": false, "note": "Zero based" },
-        "wip_limit": { "type": "INTEGER", "nullable": true }
+        "id": {
+          "type": "TEXT",
+          "nullable": false,
+          "note": "Unique within the board"
+        },
+        "board_id": {
+          "type": "INTEGER",
+          "nullable": false
+        },
+        "title": {
+          "type": "TEXT",
+          "nullable": false
+        },
+        "position": {
+          "type": "INTEGER",
+          "nullable": false,
+          "note": "Zero based"
+        },
+        "wip_limit": {
+          "type": "INTEGER",
+          "nullable": true
+        }
       },
       "constraints": [
-        { "type": "primary_key", "columns": ["board_id", "id"] },
-        { "type": "unique", "columns": ["board_id", "position"] },
+        {
+          "type": "primary_key",
+          "columns": [
+            "board_id",
+            "id"
+          ]
+        },
+        {
+          "type": "unique",
+          "columns": [
+            "board_id",
+            "position"
+          ]
+        },
         {
           "type": "foreign_key",
-          "columns": ["board_id"],
-          "references": { "table": "boards", "columns": ["id"] },
+          "columns": [
+            "board_id"
+          ],
+          "references": {
+            "table": "boards",
+            "columns": [
+              "id"
+            ]
+          },
           "on_delete": "CASCADE"
         },
-        { "type": "check", "expression": "length(trim(title)) > 0" },
-        { "type": "check", "expression": "position >= 0" },
-        { "type": "check", "expression": "wip_limit IS NULL OR wip_limit > 0" }
+        {
+          "type": "check",
+          "expression": "length(trim(title)) > 0"
+        },
+        {
+          "type": "check",
+          "expression": "position >= 0"
+        },
+        {
+          "type": "check",
+          "expression": "wip_limit IS NULL OR wip_limit > 0"
+        }
       ]
     },
     "cards": {
       "purpose": "Ordered cards within a board column.",
       "columns": {
-        "id": { "type": "TEXT", "primary_key": true, "note": "Globally unique, generated by the backend" },
-        "board_id": { "type": "INTEGER", "nullable": false },
-        "column_id": { "type": "TEXT", "nullable": false },
-        "title": { "type": "TEXT", "nullable": false },
-        "details": { "type": "TEXT", "nullable": false, "default": "" },
-        "position": { "type": "INTEGER", "nullable": false, "note": "Zero based within the column" },
-        "priority": { "type": "TEXT", "nullable": false, "default": "medium" },
-        "due_date": { "type": "TEXT", "nullable": true, "format": "YYYY-MM-DD" },
-        "assignee_id": { "type": "INTEGER", "nullable": true, "note": "Must be a member of the same board" },
-        "created_at": { "type": "TEXT", "nullable": false, "format": "UTC ISO 8601" },
-        "updated_at": { "type": "TEXT", "nullable": false, "format": "UTC ISO 8601" }
+        "id": {
+          "type": "TEXT",
+          "primary_key": true,
+          "note": "Globally unique, generated by the backend"
+        },
+        "board_id": {
+          "type": "INTEGER",
+          "nullable": false
+        },
+        "column_id": {
+          "type": "TEXT",
+          "nullable": false
+        },
+        "title": {
+          "type": "TEXT",
+          "nullable": false
+        },
+        "details": {
+          "type": "TEXT",
+          "nullable": false,
+          "default": ""
+        },
+        "position": {
+          "type": "INTEGER",
+          "nullable": false,
+          "note": "Zero based within the column"
+        },
+        "priority": {
+          "type": "TEXT",
+          "nullable": false,
+          "default": "medium"
+        },
+        "due_date": {
+          "type": "TEXT",
+          "nullable": true,
+          "format": "YYYY-MM-DD"
+        },
+        "assignee_id": {
+          "type": "INTEGER",
+          "nullable": true,
+          "note": "Must be a member of the same board"
+        },
+        "created_at": {
+          "type": "TEXT",
+          "nullable": false,
+          "format": "UTC ISO 8601"
+        },
+        "updated_at": {
+          "type": "TEXT",
+          "nullable": false,
+          "format": "UTC ISO 8601"
+        }
       },
       "constraints": [
-        { "type": "unique", "columns": ["board_id", "column_id", "position"] },
+        {
+          "type": "unique",
+          "columns": [
+            "board_id",
+            "column_id",
+            "position"
+          ]
+        },
         {
           "type": "foreign_key",
-          "columns": ["board_id", "column_id"],
-          "references": { "table": "columns", "columns": ["board_id", "id"] },
+          "columns": [
+            "board_id",
+            "column_id"
+          ],
+          "references": {
+            "table": "columns",
+            "columns": [
+              "board_id",
+              "id"
+            ]
+          },
           "on_delete": "CASCADE"
         },
         {
           "type": "foreign_key",
-          "columns": ["assignee_id"],
-          "references": { "table": "users", "columns": ["id"] },
+          "columns": [
+            "assignee_id"
+          ],
+          "references": {
+            "table": "users",
+            "columns": [
+              "id"
+            ]
+          },
           "on_delete": "SET NULL"
         },
-        { "type": "check", "expression": "length(trim(title)) > 0" },
-        { "type": "check", "expression": "position >= 0" },
-        { "type": "check", "expression": "priority IN ('low', 'medium', 'high', 'urgent')" }
+        {
+          "type": "check",
+          "expression": "length(trim(title)) > 0"
+        },
+        {
+          "type": "check",
+          "expression": "position >= 0"
+        },
+        {
+          "type": "check",
+          "expression": "priority IN ('low', 'medium', 'high', 'urgent')"
+        }
       ],
       "indexes": [
-        { "name": "cards_board", "columns": ["board_id"] },
-        { "name": "cards_assignee", "columns": ["assignee_id"] }
+        {
+          "name": "cards_board",
+          "columns": [
+            "board_id"
+          ]
+        },
+        {
+          "name": "cards_assignee",
+          "columns": [
+            "assignee_id"
+          ]
+        }
+      ]
+    },
+    "labels": {
+      "purpose": "Board-scoped labels in the product's five colors.",
+      "columns": {
+        "id": {
+          "type": "TEXT",
+          "nullable": false,
+          "note": "Unique within the board"
+        },
+        "board_id": {
+          "type": "INTEGER",
+          "nullable": false
+        },
+        "name": {
+          "type": "TEXT",
+          "nullable": false
+        },
+        "color": {
+          "type": "TEXT",
+          "nullable": false
+        },
+        "position": {
+          "type": "INTEGER",
+          "nullable": false,
+          "note": "Zero based"
+        }
+      },
+      "constraints": [
+        {
+          "type": "primary_key",
+          "columns": [
+            "board_id",
+            "id"
+          ]
+        },
+        {
+          "type": "unique",
+          "columns": [
+            "board_id",
+            "position"
+          ]
+        },
+        {
+          "type": "foreign_key",
+          "columns": [
+            "board_id"
+          ],
+          "references": {
+            "table": "boards",
+            "columns": [
+              "id"
+            ]
+          },
+          "on_delete": "CASCADE"
+        },
+        {
+          "type": "check",
+          "expression": "length(trim(name)) > 0"
+        },
+        {
+          "type": "check",
+          "expression": "color IN ('yellow', 'blue', 'purple', 'navy', 'gray')"
+        },
+        {
+          "type": "check",
+          "expression": "position >= 0"
+        }
+      ]
+    },
+    "card_labels": {
+      "purpose": "Which labels are attached to which cards. The board_id keeps a card and its label on the same board.",
+      "columns": {
+        "card_id": {
+          "type": "TEXT",
+          "nullable": false
+        },
+        "board_id": {
+          "type": "INTEGER",
+          "nullable": false
+        },
+        "label_id": {
+          "type": "TEXT",
+          "nullable": false
+        }
+      },
+      "constraints": [
+        {
+          "type": "primary_key",
+          "columns": [
+            "card_id",
+            "label_id"
+          ]
+        },
+        {
+          "type": "foreign_key",
+          "columns": [
+            "card_id"
+          ],
+          "references": {
+            "table": "cards",
+            "columns": [
+              "id"
+            ]
+          },
+          "on_delete": "CASCADE"
+        },
+        {
+          "type": "foreign_key",
+          "columns": [
+            "board_id",
+            "label_id"
+          ],
+          "references": {
+            "table": "labels",
+            "columns": [
+              "board_id",
+              "id"
+            ]
+          },
+          "on_delete": "CASCADE"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "card_labels_label",
+          "columns": [
+            "board_id",
+            "label_id"
+          ]
+        }
+      ]
+    },
+    "card_comments": {
+      "purpose": "The discussion on a card. Any board member may comment, including viewers.",
+      "columns": {
+        "id": {
+          "type": "INTEGER",
+          "primary_key": true,
+          "auto_increment": true
+        },
+        "card_id": {
+          "type": "TEXT",
+          "nullable": false
+        },
+        "author_id": {
+          "type": "INTEGER",
+          "nullable": true,
+          "note": "Null once the account is deleted"
+        },
+        "body": {
+          "type": "TEXT",
+          "nullable": false
+        },
+        "created_at": {
+          "type": "TEXT",
+          "nullable": false,
+          "format": "UTC ISO 8601"
+        },
+        "updated_at": {
+          "type": "TEXT",
+          "nullable": false,
+          "format": "UTC ISO 8601"
+        }
+      },
+      "constraints": [
+        {
+          "type": "foreign_key",
+          "columns": [
+            "card_id"
+          ],
+          "references": {
+            "table": "cards",
+            "columns": [
+              "id"
+            ]
+          },
+          "on_delete": "CASCADE"
+        },
+        {
+          "type": "foreign_key",
+          "columns": [
+            "author_id"
+          ],
+          "references": {
+            "table": "users",
+            "columns": [
+              "id"
+            ]
+          },
+          "on_delete": "SET NULL"
+        },
+        {
+          "type": "check",
+          "expression": "length(trim(body)) > 0"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "card_comments_card",
+          "columns": [
+            "card_id"
+          ]
+        }
+      ]
+    },
+    "checklist_items": {
+      "purpose": "An ordered checklist on a card; its counts roll up onto the board projection.",
+      "columns": {
+        "id": {
+          "type": "INTEGER",
+          "primary_key": true,
+          "auto_increment": true
+        },
+        "card_id": {
+          "type": "TEXT",
+          "nullable": false
+        },
+        "title": {
+          "type": "TEXT",
+          "nullable": false
+        },
+        "done": {
+          "type": "INTEGER",
+          "nullable": false,
+          "default": 0
+        },
+        "position": {
+          "type": "INTEGER",
+          "nullable": false,
+          "note": "Zero based within the card"
+        },
+        "created_at": {
+          "type": "TEXT",
+          "nullable": false,
+          "format": "UTC ISO 8601"
+        }
+      },
+      "constraints": [
+        {
+          "type": "unique",
+          "columns": [
+            "card_id",
+            "position"
+          ]
+        },
+        {
+          "type": "foreign_key",
+          "columns": [
+            "card_id"
+          ],
+          "references": {
+            "table": "cards",
+            "columns": [
+              "id"
+            ]
+          },
+          "on_delete": "CASCADE"
+        },
+        {
+          "type": "check",
+          "expression": "length(trim(title)) > 0"
+        },
+        {
+          "type": "check",
+          "expression": "done IN (0, 1)"
+        },
+        {
+          "type": "check",
+          "expression": "position >= 0"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "checklist_items_card",
+          "columns": [
+            "card_id"
+          ]
+        }
       ]
     }
   },
@@ -172,7 +748,8 @@
     "AI chat messages"
   ],
   "migrations": {
-    "0_to_2": "An empty file is created directly at the current schema.",
-    "1_to_2": "Rebuilds the single-board v1 schema: users gain credentials, a role, and an active flag; boards lose the one-per-user constraint and gain a description and an archived flag; board_members and sessions are added; columns drop the fixed key and gain a WIP limit; cards gain a priority, due date, and assignee. Migrated accounts get an unusable password hash until one is set."
+    "1_to_2": "Rebuilds the single-board v1 schema: users gain credentials, a role, and an active flag; boards lose the one-per-user constraint and gain a description and an archived flag; board_members and sessions are added; columns drop the fixed key and gain a WIP limit; cards gain a priority, due date, and assignee. Migrated accounts get an unusable password hash until one is set.",
+    "0_to_3": "An empty file is created directly at the current schema.",
+    "2_to_3": "Adds labels, card_labels, card_comments, and checklist_items, and gives every existing board the default label set. Nothing already stored is rewritten."
   }
 }

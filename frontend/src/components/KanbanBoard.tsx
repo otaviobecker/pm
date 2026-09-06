@@ -35,6 +35,7 @@ type KanbanBoardProps = {
   members: BoardMember[];
   memberNames: Map<number, string>;
   onRun: (operation: () => Promise<BoardData>) => Promise<boolean>;
+  onOpenCard: (cardId: string) => void;
 };
 
 const matches = (card: Card, filters: Filters, term: string) => {
@@ -50,6 +51,9 @@ const matches = (card: Card, filters: Filters, term: string) => {
       return false;
     }
   }
+  if (filters.labelId !== "all" && !card.labelIds.includes(filters.labelId)) {
+    return false;
+  }
   return true;
 };
 
@@ -59,6 +63,7 @@ export const KanbanBoard = ({
   members,
   memberNames,
   onRun,
+  onOpenCard,
 }: KanbanBoardProps) => {
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const [filters, setFilters] = useState<Filters>(emptyFilters);
@@ -70,7 +75,8 @@ export const KanbanBoard = ({
   const filtering =
     filters.search.trim() !== "" ||
     filters.priority !== "all" ||
-    filters.assigneeId !== "all";
+    filters.assigneeId !== "all" ||
+    filters.labelId !== "all";
 
   const visibleColumns = useMemo(() => {
     if (!filtering) {
@@ -144,6 +150,7 @@ export const KanbanBoard = ({
         <BoardFilters
           filters={filters}
           members={members}
+          labels={board.labels}
           onChange={setFilters}
           matchCount={filtering ? totals.shown : null}
         />
@@ -191,6 +198,8 @@ export const KanbanBoard = ({
                 draggable={editable && !filtering}
                 members={members}
                 memberNames={memberNames}
+                board={board}
+                onOpenCard={onOpenCard}
                 otherColumns={board.columns.filter(
                   (candidate) => candidate.id !== column.id
                 )}

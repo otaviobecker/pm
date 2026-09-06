@@ -1,4 +1,5 @@
 export type Priority = "low" | "medium" | "high" | "urgent";
+export type LabelColor = "yellow" | "blue" | "purple" | "navy" | "gray";
 export type BoardRole = "owner" | "editor" | "viewer";
 export type AccountRole = "admin" | "member";
 
@@ -9,8 +10,40 @@ export type Card = {
   priority: Priority;
   dueDate: string | null;
   assigneeId: number | null;
+  labelIds: string[];
+  commentCount: number;
+  checklistTotal: number;
+  checklistDone: number;
   createdAt: string;
   updatedAt: string;
+};
+
+export type Label = {
+  id: string;
+  name: string;
+  color: LabelColor;
+};
+
+export type Comment = {
+  id: number;
+  body: string;
+  authorId: number | null;
+  authorName: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ChecklistItem = {
+  id: number;
+  title: string;
+  done: boolean;
+};
+
+export type CardDetail = Card & {
+  boardId: number;
+  columnId: string;
+  comments: Comment[];
+  checklist: ChecklistItem[];
 };
 
 export type Column = {
@@ -38,6 +71,7 @@ export type BoardData = {
   updatedAt: string;
   columns: Column[];
   cards: Record<string, Card>;
+  labels: Label[];
   members: BoardMember[];
 };
 
@@ -57,6 +91,14 @@ export type BoardSummary = {
 };
 
 export const priorities: Priority[] = ["low", "medium", "high", "urgent"];
+
+export const labelColors: LabelColor[] = [
+  "yellow",
+  "blue",
+  "purple",
+  "navy",
+  "gray",
+];
 
 export const priorityLabels: Record<Priority, string> = {
   low: "Low",
@@ -203,3 +245,12 @@ export const initials = (name: string) =>
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase() ?? "")
     .join("") || name.slice(0, 2).toUpperCase();
+
+/** Cards with every checklist item ticked are complete; empty checklists are not. */
+export const checklistComplete = (card: Card) =>
+  card.checklistTotal > 0 && card.checklistDone === card.checklistTotal;
+
+export const labelsFor = (board: BoardData, card: Card): Label[] =>
+  card.labelIds
+    .map((labelId) => board.labels.find((label) => label.id === labelId))
+    .filter((label): label is Label => label !== undefined);

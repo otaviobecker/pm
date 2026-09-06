@@ -5,6 +5,7 @@ import {
   priorities,
   priorityLabels,
   type BoardMember,
+  type Label,
   type Priority,
 } from "@/lib/kanban";
 
@@ -12,17 +13,20 @@ export type Filters = {
   search: string;
   priority: Priority | "all";
   assigneeId: number | "all" | "none";
+  labelId: string | "all";
 };
 
 export const emptyFilters: Filters = {
   search: "",
   priority: "all",
   assigneeId: "all",
+  labelId: "all",
 };
 
 type BoardFiltersProps = {
   filters: Filters;
   members: BoardMember[];
+  labels: Label[];
   onChange: (filters: Filters) => void;
   /** Number of matching cards, or null when no filter is active. */
   matchCount: number | null;
@@ -34,6 +38,7 @@ const selectClass =
 export const BoardFilters = ({
   filters,
   members,
+  labels,
   onChange,
   matchCount,
 }: BoardFiltersProps) => (
@@ -93,6 +98,24 @@ export const BoardFilters = ({
         </option>
       ))}
     </select>
+
+    {labels.length > 0 ? (
+      <select
+        value={filters.labelId}
+        onChange={(event) =>
+          onChange({ ...filters, labelId: event.target.value })
+        }
+        aria-label="Filter by label"
+        className={selectClass}
+      >
+        <option value="all">Any label</option>
+        {labels.map((label) => (
+          <option key={label.id} value={label.id}>
+            {label.name}
+          </option>
+        ))}
+      </select>
+    ) : null}
 
     {matchCount !== null ? (
       <span className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--gray-text)]">

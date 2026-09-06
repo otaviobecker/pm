@@ -57,8 +57,8 @@ Three stages: (1) `node:24` builds the Next.js static export, (2) `uv`-based ima
 ### Backend (`backend/app/`)
 
 - `main.py` — FastAPI app; maps domain errors to HTTP responses, includes the routers, and mounts static files at `/` last so API requests are never shadowed.
-- `routers/` — the HTTP layer: `auth`, `users`, `boards` (boards, members, columns), `cards`, `chat`. Routers stay thin and delegate to one repository call.
-- `repositories/` — the data layer, owning its own transactions: `users`, `sessions`, `boards`, `columns`, `cards`, `board_updates`.
+- `routers/` — the HTTP layer: `auth`, `users`, `boards` (boards, members, columns), `card_details` (labels, comments, checklists), `cards`, `chat`. Routers stay thin and delegate to one repository call.
+- `repositories/` — the data layer, owning its own transactions: `users`, `sessions`, `boards`, `columns`, `cards`, `labels`, `card_details`, `board_updates`.
 - `database.py` — connection helpers, schema, numbered migrations keyed on `PRAGMA user_version`, and seeding. Every connection enables foreign keys, WAL mode, and a busy timeout.
 - `security.py` — PBKDF2 password hashing and session token generation/digesting.
 - `auth.py` — session cookie settings, login throttling, and the `AuthenticatedUser`/`AdminUser` dependencies.
@@ -74,7 +74,7 @@ Board access is per board through `board_members`: `owner` (delete, archive, man
 
 ### Database model
 
-Six tables: `users`, `sessions`, `boards` (many per owner, archivable), `board_members`, `columns` (per board, addable/renamable/reorderable/deletable, with an optional WIP limit), and `cards` (with priority, due date, and assignee; the composite FK ties a card to its board's column). Card and column positions are zero-based; reorders and cross-column moves rewrite positions in one transaction, staged through a high temporary range to avoid uniqueness collisions. AI-driven updates validate the entire proposed change before any write begins, and roll back completely on failure. Chat messages and plain-text passwords are never persisted.
+Ten tables: `users`, `sessions`, `boards` (many per owner, archivable), `board_members`, `columns` (per board, addable/renamable/reorderable/deletable, with an optional WIP limit), `cards` (with priority, due date, and assignee; the composite FK ties a card to its board's column), `labels` and `card_labels`, `card_comments`, and `checklist_items`. Card, column, label, and checklist positions are zero-based; reorders and cross-column moves rewrite positions in one transaction, staged through a high temporary range to avoid uniqueness collisions. AI-driven updates validate the entire proposed change before any write begins, reconcile cards in place so a card's labels, comments, and checklist survive, and roll back completely on failure. Chat messages and plain-text passwords are never persisted.
 
 ### AI chat flow
 
@@ -89,8 +89,9 @@ Six tables: `users`, `sessions`, `boards` (many per owner, archivable), `board_m
 - `components/BoardRail.tsx` / `BoardSettingsDialog.tsx` / `AccountDialog.tsx` / `Dialog.tsx` — board switching and creation, board sharing and lifecycle, profile and administration, shared modal shell.
 - `components/KanbanBoard.tsx` — column rendering, filtering, and `@dnd-kit` drag-and-drop (pointer sensor, 6px activation distance, `closestCorners`).
 - `components/KanbanColumn.tsx` / `KanbanCard.tsx` / `KanbanCardPreview.tsx` / `NewCardForm.tsx` / `NewColumnForm.tsx` / `BoardFilters.tsx` — column and card rendering, local form state, and the filter bar.
+- `components/CardDetailDialog.tsx` — the expanded card: its fields, labels, checklist, and comment thread.
 - `components/ChatSidebar.tsx` — session-only AI conversation state for the open board.
 - `lib/api.ts` — typed same-origin `/api` client; browser code must never receive `OPENROUTER_API_KEY`.
-- `lib/kanban.ts` — board types and pure helpers (`moveCard`, `wipState`, `dueState`, role checks); keep reusable board logic here and keep board transformations immutable.
+- `lib/kanban.ts` — board types and pure helpers (`moveCard`, `wipState`, `dueState`, `labelsFor`, role checks); keep reusable board logic here and keep board transformations immutable.
 - Required color tokens (do not change): yellow `#ecad0a`, blue `#209dd7`, purple `#753991`, navy `#032147`, gray `#888888`.
 - Preserve accessible labels and existing `data-testid` values when touching tested interactions.

@@ -1,4 +1,4 @@
-import type { Priority } from "@/lib/kanban";
+import type { LabelColor, Priority } from "@/lib/kanban";
 
 /** Presentation-only accents for board columns, in board order. */
 export type ColumnAccent = {
@@ -34,3 +34,20 @@ export const dueAccent = {
   soon: { color: "#209dd7", soft: "rgba(32, 157, 215, 0.14)" },
   later: { color: "#888888", soft: "rgba(136, 136, 136, 0.14)" },
 } satisfies Record<string, ColumnAccent>;
+
+/** Label chips use the five brand colors by name. */
+export const labelAccent: Record<LabelColor, ColumnAccent> = {
+  yellow: { color: "#ecad0a", soft: "rgba(236, 173, 10, 0.18)" },
+  blue: { color: "#209dd7", soft: "rgba(32, 157, 215, 0.14)" },
+  purple: { color: "#753991", soft: "rgba(117, 57, 145, 0.14)" },
+  navy: { color: "#032147", soft: "rgba(3, 33, 71, 0.10)" },
+  gray: { color: "#888888", soft: "rgba(136, 136, 136, 0.14)" },
+};
+
+export const labelColorNames: Record<LabelColor, string> = {
+  yellow: "Yellow",
+  blue: "Blue",
+  purple: "Purple",
+  navy: "Navy",
+  gray: "Gray",
+};

@@ -33,6 +33,8 @@ const onRun = vi.fn(async (operation: () => Promise<BoardData>) => {
   return true;
 });
 
+const onOpenCard = vi.fn();
+
 const renderBoard = (overrides: Partial<BoardData> = {}) => {
   const board = makeBoard(overrides);
   const memberNames = new Map(
@@ -45,6 +47,7 @@ const renderBoard = (overrides: Partial<BoardData> = {}) => {
       members={board.members}
       memberNames={memberNames}
       onRun={onRun}
+      onOpenCard={onOpenCard}
     />
   );
   return board;
@@ -265,5 +268,83 @@ describe("KanbanBoard", () => {
     renderBoard({ archived: true });
 
     expect(screen.queryByRole("button", { name: /add a card/i })).toBeNull();
+  });
+
+  it("shows a card's labels", () => {
+    const board = makeBoard();
+    board.cards["card-1"].labelIds = ["label-bug"];
+    renderBoard(board);
+
+    const card = screen.getByTestId("card-card-1");
+    expect(within(card).getByLabelText("Label Bug")).toHaveTextContent("Bug");
+    expect(within(card).queryByLabelText("Label Feature")).toBeNull();
+  });
+
+  it("shows checklist progress and comment counts", () => {
+    const board = makeBoard();
+    Object.assign(board.cards["card-1"], {
+      checklistTotal: 3,
+      checklistDone: 1,
+      commentCount: 2,
+    });
+    renderBoard(board);
+
+    const card = screen.getByTestId("card-card-1");
+    expect(
+      within(card).getByLabelText("Checklist 1 of 3 done")
+    ).toHaveTextContent("1/3");
+    expect(within(card).getByLabelText("2 comments")).toHaveTextContent("2");
+  });
+
+  it("leaves the rollup chips off a card that has none", () => {
+    renderBoard();
+
+    const card = screen.getByTestId("card-card-1");
+    expect(within(card).queryByLabelText(/^Checklist/)).toBeNull();
+    expect(within(card).queryByLabelText(/comment/)).toBeNull();
+  });
+
+  it("opens a card from its title and from the expand action", async () => {
+    renderBoard();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Open Align roadmap themes" })
+    );
+    expect(onOpenCard).toHaveBeenCalledWith("card-1");
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Open details for Gather customer signals" })
+    );
+    expect(onOpenCard).toHaveBeenLastCalledWith("card-2");
+  });
+
+  it("lets viewers open a card even though they cannot edit it", async () => {
+    renderBoard({ role: "viewer" });
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Open details for Align roadmap themes" })
+    );
+
+    expect(onOpenCard).toHaveBeenCalledWith("card-1");
+  });
+
+  it("filters cards by label", async () => {
+    const board = makeBoard();
+    board.cards["card-2"].labelIds = ["label-bug"];
+    renderBoard(board);
+
+    await userEvent.selectOptions(
+      screen.getByLabelText("Filter by label"),
+      "label-bug"
+    );
+
+    expect(screen.queryByTestId("card-card-1")).not.toBeInTheDocument();
+    expect(screen.getByTestId("card-card-2")).toBeInTheDocument();
+  });
+
+  it("hides the label filter when the board has no labels", () => {
+    renderBoard({ labels: [] });
+
+    expect(screen.queryByLabelText("Filter by label")).toBeNull();
   });
 });
