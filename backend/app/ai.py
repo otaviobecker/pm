@@ -79,33 +79,60 @@ def test_connectivity() -> str:
     return response_content(response)
 
 
+def board_snapshot(board: BoardResponse) -> dict[str, Any]:
+    """The board as the assistant sees it: no members, timestamps, or IDs it cannot use."""
+    return {
+        "name": board.name,
+        "description": board.description,
+        "columns": [
+            {
+                "id": column.id,
+                "title": column.title,
+                "wipLimit": column.wipLimit,
+                "cards": [
+                    {
+                        "id": card_id,
+                        "title": board.cards[card_id].title,
+                        "details": board.cards[card_id].details,
+                        "priority": board.cards[card_id].priority,
+                        "dueDate": board.cards[card_id].dueDate,
+                    }
+                    for card_id in column.cardIds
+                ],
+            }
+            for column in board.columns
+        ],
+    }
+
+
+def system_prompt(board: BoardResponse) -> str:
+    column_ids = ", ".join(column.id for column in board.columns)
+    return (
+        "You are a project management assistant working on a Kanban board. Respond using "
+        "the required JSON schema. Set board to null for conversation-only answers. When "
+        "changing the board, return the complete board. Preserve exactly these column IDs "
+        f"and order: {column_ids}. You may rename columns and create, edit, delete, "
+        "reorder, or move cards, and you may set each card's priority (low, medium, high, "
+        "urgent) and dueDate (YYYY-MM-DD or null). Return cards nested in their target "
+        "column in display order, and include every card exactly once. Keep the ID of an "
+        "existing card unchanged and invent a new short ID for a card you add."
+    )
+
+
 def chat(
     board: BoardResponse,
     message: str,
     history: list[ChatMessage],
 ) -> StructuredAiResponse:
     messages: list[dict[str, str]] = [
-        {
-            "role": "system",
-            "content": (
-                "You are a project management assistant. Respond using the required JSON schema. "
-                "Set board to null for conversation-only answers. When changing the board, return "
-                "the complete board. Preserve exactly these column IDs and order: col-backlog, "
-                "col-discovery, col-progress, col-review, col-done. You may rename columns and "
-                "create, edit, delete, reorder, or move cards. Return cards nested in their target "
-                "column in display order, and include every card exactly once."
-            ),
-        }
+        {"role": "system", "content": system_prompt(board)}
     ]
-    messages.extend(
-        {"role": item.role, "content": item.content}
-        for item in history
-    )
+    messages.extend({"role": item.role, "content": item.content} for item in history)
     messages.append(
         {
             "role": "user",
             "content": (
-                f"Current board:\n{board.model_dump_json(by_alias=True)}\n\n"
+                f"Current board:\n{json.dumps(board_snapshot(board))}\n\n"
                 f"User request:\n{message}"
             ),
         }

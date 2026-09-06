@@ -1,21 +1,21 @@
+"""Session cookie handling, login throttling, and the request dependencies."""
+
 import os
 from collections import defaultdict
-from secrets import token_urlsafe
 from time import monotonic
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, HTTPException, Request, Response, status
 
 from app.models import UserResponse
+from app.repositories import sessions
 
 SESSION_COOKIE = "pm_session"
-SESSION_TTL_SECONDS = 24 * 60 * 60
 
 LOGIN_ATTEMPT_LIMIT = 5
 LOGIN_ATTEMPT_WINDOW_SECONDS = 60.0
 LOGIN_LOCKOUT_SECONDS = 30.0
 
-sessions: dict[str, float] = {}
 failed_login_attempts: dict[str, list[float]] = defaultdict(list)
 login_lockouts: dict[str, float] = {}
 
@@ -24,30 +24,31 @@ def cookie_secure() -> bool:
     return os.environ.get("COOKIE_SECURE", "false").lower() in {"1", "true", "yes"}
 
 
-def create_session() -> str:
-    session_id = token_urlsafe(32)
-    sessions[session_id] = monotonic()
-    return session_id
+def set_session_cookie(response: Response, token: str) -> None:
+    response.set_cookie(
+        key=SESSION_COOKIE,
+        value=token,
+        httponly=True,
+        samesite="lax",
+        secure=cookie_secure(),
+        max_age=int(sessions.SESSION_TTL.total_seconds()),
+        path="/",
+    )
 
 
-def invalidate_session(session_id: str | None) -> None:
-    if session_id is not None:
-        sessions.pop(session_id, None)
+def clear_session_cookie(response: Response) -> None:
+    response.delete_cookie(
+        SESSION_COOKIE,
+        httponly=True,
+        samesite="lax",
+        secure=cookie_secure(),
+        path="/",
+    )
 
 
-def prune_sessions() -> None:
-    now = monotonic()
-    expired = [
-        token
-        for token, issued_at in sessions.items()
-        if now - issued_at > SESSION_TTL_SECONDS
-    ]
-    for token in expired:
-        sessions.pop(token, None)
-
-
-def client_key(request: Request) -> str:
-    return request.client.host if request.client else "unknown"
+def client_key(request: Request, username: str = "") -> str:
+    host = request.client.host if request.client else "unknown"
+    return f"{host}:{username.strip().lower()}"
 
 
 def is_locked_out(key: str) -> bool:
@@ -61,15 +62,15 @@ def is_locked_out(key: str) -> bool:
 
 
 def record_failed_login(key: str) -> None:
-    now = monotonic()
+    current = monotonic()
     attempts = [
         attempt
         for attempt in failed_login_attempts[key]
-        if now - attempt < LOGIN_ATTEMPT_WINDOW_SECONDS
+        if current - attempt < LOGIN_ATTEMPT_WINDOW_SECONDS
     ]
-    attempts.append(now)
+    attempts.append(current)
     if len(attempts) >= LOGIN_ATTEMPT_LIMIT:
-        login_lockouts[key] = now + LOGIN_LOCKOUT_SECONDS
+        login_lockouts[key] = current + LOGIN_LOCKOUT_SECONDS
         attempts = []
     failed_login_attempts[key] = attempts
 
@@ -79,15 +80,32 @@ def clear_failed_logins(key: str) -> None:
     login_lockouts.pop(key, None)
 
 
+def reset_login_throttling() -> None:
+    """Test and administration helper that forgets every recorded failure."""
+    failed_login_attempts.clear()
+    login_lockouts.clear()
+
+
 def current_user(request: Request) -> UserResponse:
-    prune_sessions()
-    session_id = request.cookies.get(SESSION_COOKIE)
-    if session_id is None or session_id not in sessions:
+    user = sessions.resolve(request.cookies.get(SESSION_COOKIE))
+    if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication required",
         )
-    return UserResponse(username="user")
+    return UserResponse.model_validate(user)
 
 
 AuthenticatedUser = Annotated[UserResponse, Depends(current_user)]
+
+
+def current_admin(user: AuthenticatedUser) -> UserResponse:
+    if user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Administrator access required",
+        )
+    return user
+
+
+AdminUser = Annotated[UserResponse, Depends(current_admin)]

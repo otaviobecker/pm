@@ -1,42 +1,28 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
-from secrets import compare_digest
 
-from fastapi import FastAPI, HTTPException, Request, Response, status
-from fastapi.staticfiles import StaticFiles
+from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
-from app import ai, db
-from app.auth import (
-    SESSION_COOKIE,
-    AuthenticatedUser,
-    clear_failed_logins,
-    client_key,
-    cookie_secure,
-    create_session,
-    invalidate_session,
-    is_locked_out,
-    record_failed_login,
+from app import ai, database
+from app.errors import (
+    ConflictError,
+    InvalidRequestError,
+    NotFoundError,
+    PermissionDeniedError,
 )
 from app.middleware import limit_request_body_size
-from app.models import (
-    BoardResponse,
-    CardRequest,
-    ChatRequest,
-    ChatResponse,
-    CreateCardRequest,
-    LoginRequest,
-    MoveCardRequest,
-    RenameColumnRequest,
-    UserResponse,
-)
+from app.repositories import sessions
+from app.routers import auth, boards, cards, chat, users
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    db.initialize_database()
+    database.initialize_database()
+    sessions.prune_expired()
     yield
 
 
@@ -44,29 +30,39 @@ app = FastAPI(title="Project Management API", lifespan=lifespan)
 app.middleware("http")(limit_request_body_size)
 
 
-@app.exception_handler(LookupError)
-def not_found(_: Request, exception: LookupError) -> JSONResponse:
-    return JSONResponse(
-        status_code=status.HTTP_404_NOT_FOUND,
-        content={"detail": str(exception)},
-    )
+def error_response(status_code: int, exception: Exception) -> JSONResponse:
+    return JSONResponse(status_code=status_code, content={"detail": str(exception)})
+
+
+@app.exception_handler(NotFoundError)
+def not_found(_: Request, exception: NotFoundError) -> JSONResponse:
+    return error_response(status.HTTP_404_NOT_FOUND, exception)
+
+
+@app.exception_handler(PermissionDeniedError)
+def permission_denied(_: Request, exception: PermissionDeniedError) -> JSONResponse:
+    return error_response(status.HTTP_403_FORBIDDEN, exception)
+
+
+@app.exception_handler(ConflictError)
+def conflict(_: Request, exception: ConflictError) -> JSONResponse:
+    return error_response(status.HTTP_409_CONFLICT, exception)
+
+
+@app.exception_handler(InvalidRequestError)
+def invalid_request(_: Request, exception: InvalidRequestError) -> JSONResponse:
+    return error_response(status.HTTP_422_UNPROCESSABLE_CONTENT, exception)
 
 
 @app.exception_handler(ai.AiConfigurationError)
 def ai_not_configured(_: Request, exception: ai.AiConfigurationError) -> JSONResponse:
-    return JSONResponse(
-        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-        content={"detail": str(exception)},
-    )
+    return error_response(status.HTTP_503_SERVICE_UNAVAILABLE, exception)
 
 
 @app.exception_handler(ai.AiServiceError)
 @app.exception_handler(ai.AiResponseError)
 def ai_upstream_error(_: Request, exception: ai.AiError) -> JSONResponse:
-    return JSONResponse(
-        status_code=status.HTTP_502_BAD_GATEWAY,
-        content={"detail": str(exception)},
-    )
+    return error_response(status.HTTP_502_BAD_GATEWAY, exception)
 
 
 @app.get("/api/health")
@@ -74,135 +70,11 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.get("/api/hello")
-def hello() -> dict[str, str]:
-    return {"message": "Hello from FastAPI"}
+app.include_router(auth.router)
+app.include_router(users.router)
+app.include_router(boards.router)
+app.include_router(cards.router)
+app.include_router(chat.router)
 
-
-@app.post("/api/auth/login", response_model=UserResponse)
-def login(credentials: LoginRequest, request: Request, response: Response) -> UserResponse:
-    key = client_key(request)
-    if is_locked_out(key):
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Too many failed login attempts. Try again shortly.",
-        )
-
-    username_matches = compare_digest(credentials.username, "user")
-    password_matches = compare_digest(credentials.password, "password")
-    if not username_matches or not password_matches:
-        record_failed_login(key)
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid username or password",
-        )
-
-    clear_failed_logins(key)
-    response.set_cookie(
-        key=SESSION_COOKIE,
-        value=create_session(),
-        httponly=True,
-        samesite="lax",
-        secure=cookie_secure(),
-    )
-    return UserResponse(username="user")
-
-
-@app.get("/api/auth/session", response_model=UserResponse)
-def read_session(user: AuthenticatedUser) -> UserResponse:
-    return user
-
-
-@app.post("/api/auth/logout", status_code=status.HTTP_204_NO_CONTENT)
-def logout(request: Request, response: Response) -> None:
-    invalidate_session(request.cookies.get(SESSION_COOKIE))
-    response.delete_cookie(
-        SESSION_COOKIE, httponly=True, samesite="lax", secure=cookie_secure()
-    )
-
-
-@app.get("/api/board", response_model=BoardResponse)
-def read_board(user: AuthenticatedUser) -> dict:
-    return db.get_board(user.username)
-
-
-@app.patch("/api/board/columns/{column_id}", response_model=BoardResponse)
-def rename_board_column(
-    column_id: str,
-    change: RenameColumnRequest,
-    user: AuthenticatedUser,
-) -> dict:
-    return db.rename_column(user.username, column_id, change.title)
-
-
-@app.post("/api/board/cards", response_model=BoardResponse)
-def add_board_card(card: CreateCardRequest, user: AuthenticatedUser) -> dict:
-    return db.create_card(user.username, card.columnId, card.title, card.details)
-
-
-@app.patch("/api/board/cards/{card_id}", response_model=BoardResponse)
-def edit_board_card(
-    card_id: str,
-    change: CardRequest,
-    user: AuthenticatedUser,
-) -> dict:
-    return db.update_card(user.username, card_id, change.title, change.details)
-
-
-@app.delete("/api/board/cards/{card_id}", response_model=BoardResponse)
-def remove_board_card(card_id: str, user: AuthenticatedUser) -> dict:
-    return db.delete_card(user.username, card_id)
-
-
-@app.post("/api/board/cards/{card_id}/move", response_model=BoardResponse)
-def move_board_card(
-    card_id: str,
-    move: MoveCardRequest,
-    user: AuthenticatedUser,
-) -> dict:
-    return db.move_card(user.username, card_id, move.columnId, move.position)
-
-
-@app.post("/api/ai/test")
-def test_ai_connection(_: AuthenticatedUser) -> dict[str, str]:
-    return {"message": ai.test_connectivity()}
-
-
-@app.post("/api/chat", response_model=ChatResponse)
-def chat(request: ChatRequest, user: AuthenticatedUser) -> ChatResponse:
-    board = BoardResponse.model_validate(db.get_board(user.username))
-    result = ai.chat(board, request.message, request.history)
-    if result.board is None:
-        return ChatResponse(message=result.message, board=None)
-    board_update = {
-        "columns": [
-            {
-                "id": column.id,
-                "title": column.title,
-                "cardIds": [card.id for card in column.cards],
-            }
-            for column in result.board.columns
-        ],
-        "cards": {
-            card.id: card.model_dump()
-            for column in result.board.columns
-            for card in column.cards
-        },
-    }
-    try:
-        updated_board = db.replace_board(
-            user.username,
-            board_update,
-        )
-    except ValueError as exception:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="AI returned an invalid board update",
-        ) from exception
-    return ChatResponse(
-        message=result.message,
-        board=BoardResponse.model_validate(updated_board),
-    )
-
-
+# Mounted last so that no static file can shadow an /api route.
 app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")

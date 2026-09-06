@@ -44,7 +44,7 @@
       <p id="api-message">Connecting to the API...</p>
     </main>
     <script>
-      fetch("/api/hello")
+      fetch("/api/health")
         .then((response) => {
           if (!response.ok) {
             throw new Error("API request failed");
@@ -52,7 +52,7 @@
           return response.json();
         })
         .then((data) => {
-          document.querySelector("#api-message").textContent = data.message;
+          document.querySelector("#api-message").textContent = data.status === "ok" ? "API is healthy" : "API reported a problem";
         })
         .catch(() => {
           document.querySelector("#api-message").textContent =
