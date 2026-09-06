@@ -6,7 +6,7 @@ from typing import Any
 
 from app.database import now, transaction
 from app.errors import InvalidRequestError, NotFoundError
-from app.repositories import boards, columns
+from app.repositories import boards, columns, labels
 
 # Cards are parked in these ranges while positions are rewritten so the
 # (board_id, column_id, position) unique index never sees a duplicate.
@@ -101,6 +101,7 @@ def create(
     priority: str = "medium",
     due_date: str | None = None,
     assignee_id: int | None = None,
+    label_ids: list[str] | None = None,
 ) -> dict[str, Any]:
     with transaction() as connection:
         role = boards.require_access(connection, user_id, board_id, minimum="editor")
@@ -109,6 +110,7 @@ def create(
         require_assignee(connection, board_id, assignee_id)
         position = len(column_card_ids(connection, board_id, column_id))
         timestamp = now()
+        card_id = f"card-{token_urlsafe(9)}"
         connection.execute(
             """
             INSERT INTO cards
@@ -117,7 +119,7 @@ def create(
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                f"card-{token_urlsafe(9)}",
+                card_id,
                 board_id,
                 column_id,
                 title.strip(),
@@ -130,6 +132,8 @@ def create(
                 timestamp,
             ),
         )
+        if label_ids:
+            labels.set_for_card(connection, board_id, card_id, label_ids)
         boards.touch(connection, board_id)
         return boards.read(connection, board_id, role)
 

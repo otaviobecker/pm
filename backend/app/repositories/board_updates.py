@@ -13,6 +13,9 @@ from app.repositories import boards
 
 PRIORITIES = {"low", "medium", "high", "urgent"}
 
+# Cards are parked in this range while positions are rewritten.
+STAGING_OFFSET = 1_000_000
+
 
 def validate(board: dict[str, Any], existing_column_ids: list[str]) -> None:
     proposed_column_ids = [column["id"] for column in board["columns"]]
@@ -50,31 +53,71 @@ def replace(user_id: int, board_id: int, board: dict[str, Any]) -> dict[str, Any
         validate(board, existing_column_ids)
         guard_foreign_card_ids(connection, board_id, list(board["cards"]))
 
-        previous = {
-            row["id"]: row
-            for row in connection.execute(
-                "SELECT id, created_at, assignee_id FROM cards WHERE board_id = ?",
-                (board_id,),
-            )
-        }
         for column in board["columns"]:
             connection.execute(
                 "UPDATE columns SET title = ? WHERE board_id = ? AND id = ?",
                 (column["title"].strip(), board_id, column["id"]),
             )
+        apply_cards(connection, board_id, board)
+        boards.touch(connection, board_id)
+        return boards.read(connection, board_id, role)
 
-        connection.execute("DELETE FROM cards WHERE board_id = ?", (board_id,))
-        timestamp = now()
-        for column in board["columns"]:
-            for position, card_id in enumerate(column["cardIds"]):
-                card = board["cards"][card_id]
-                earlier = previous.get(card_id)
+
+def apply_cards(
+    connection: sqlite3.Connection, board_id: int, board: dict[str, Any]
+) -> None:
+    """Reconcile the board's cards with the proposal.
+
+    Cards are updated in place rather than replaced so that everything hanging off
+    a card -- its labels, comments, and checklist -- survives an assistant edit.
+    """
+    existing = {
+        row["id"]
+        for row in connection.execute(
+            "SELECT id FROM cards WHERE board_id = ?", (board_id,)
+        )
+    }
+    removed = existing - set(board["cards"])
+    for card_id in removed:
+        connection.execute(
+            "DELETE FROM cards WHERE board_id = ? AND id = ?", (board_id, card_id)
+        )
+
+    # First pass parks every card at a position no other card can hold, so moves
+    # between columns cannot collide with the cards already sitting there.
+    timestamp = now()
+    staged = 0
+    for column in board["columns"]:
+        for card_id in column["cardIds"]:
+            card = board["cards"][card_id]
+            staged += 1
+            if card_id in existing:
+                connection.execute(
+                    """
+                    UPDATE cards
+                    SET column_id = ?, title = ?, details = ?, position = ?,
+                        priority = ?, due_date = ?, updated_at = ?
+                    WHERE board_id = ? AND id = ?
+                    """,
+                    (
+                        column["id"],
+                        card["title"].strip(),
+                        card.get("details", "").strip(),
+                        STAGING_OFFSET + staged,
+                        card.get("priority") or "medium",
+                        card.get("dueDate"),
+                        timestamp,
+                        board_id,
+                        card_id,
+                    ),
+                )
+            else:
                 connection.execute(
                     """
                     INSERT INTO cards
                         (id, board_id, column_id, title, details, position, priority,
                          due_date, assignee_id, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
                     """,
                     (
                         card_id,
@@ -82,16 +125,20 @@ def replace(user_id: int, board_id: int, board: dict[str, Any]) -> dict[str, Any
                         column["id"],
                         card["title"].strip(),
                         card.get("details", "").strip(),
-                        position,
+                        STAGING_OFFSET + staged,
                         card.get("priority") or "medium",
                         card.get("dueDate"),
-                        earlier["assignee_id"] if earlier is not None else None,
-                        earlier["created_at"] if earlier is not None else timestamp,
+                        timestamp,
                         timestamp,
                     ),
                 )
-        boards.touch(connection, board_id)
-        return boards.read(connection, board_id, role)
+
+    for column in board["columns"]:
+        for position, card_id in enumerate(column["cardIds"]):
+            connection.execute(
+                "UPDATE cards SET position = ? WHERE board_id = ? AND id = ?",
+                (position, board_id, card_id),
+            )
 
 
 def guard_foreign_card_ids(

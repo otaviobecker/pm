@@ -7,6 +7,7 @@ from typing import Any
 from app.database import (
     connect,
     create_default_columns,
+    create_default_labels,
     now,
     transaction,
 )
@@ -57,7 +58,7 @@ def touch(connection: sqlite3.Connection, board_id: int) -> None:
     )
 
 
-def serialize_card(row: sqlite3.Row) -> dict[str, Any]:
+def serialize_card(row: sqlite3.Row, label_ids: list[str] | None = None) -> dict[str, Any]:
     return {
         "id": row["id"],
         "title": row["title"],
@@ -65,9 +66,58 @@ def serialize_card(row: sqlite3.Row) -> dict[str, Any]:
         "priority": row["priority"],
         "dueDate": row["due_date"],
         "assigneeId": row["assignee_id"],
+        "labelIds": label_ids if label_ids is not None else [],
+        "commentCount": row["comment_count"],
+        "checklistTotal": row["checklist_total"],
+        "checklistDone": row["checklist_done"],
         "createdAt": row["created_at"],
         "updatedAt": row["updated_at"],
     }
+
+
+CARD_COLUMNS = """
+    cards.id, cards.column_id, cards.title, cards.details, cards.position,
+    cards.priority, cards.due_date, cards.assignee_id, cards.created_at,
+    cards.updated_at,
+    (SELECT count(*) FROM card_comments WHERE card_comments.card_id = cards.id)
+        AS comment_count,
+    (SELECT count(*) FROM checklist_items WHERE checklist_items.card_id = cards.id)
+        AS checklist_total,
+    (SELECT count(*) FROM checklist_items
+        WHERE checklist_items.card_id = cards.id AND checklist_items.done = 1)
+        AS checklist_done
+"""
+
+
+def read_labels(connection: sqlite3.Connection, board_id: int) -> list[dict[str, Any]]:
+    rows = connection.execute(
+        "SELECT id, name, color FROM labels WHERE board_id = ? ORDER BY position",
+        (board_id,),
+    ).fetchall()
+    return [
+        {"id": row["id"], "name": row["name"], "color": row["color"]} for row in rows
+    ]
+
+
+def read_card_labels(
+    connection: sqlite3.Connection, board_id: int
+) -> dict[str, list[str]]:
+    """Label IDs per card, ordered the same way the board's labels are."""
+    rows = connection.execute(
+        """
+        SELECT card_labels.card_id, card_labels.label_id
+        FROM card_labels
+        JOIN labels ON labels.board_id = card_labels.board_id
+                   AND labels.id = card_labels.label_id
+        WHERE card_labels.board_id = ?
+        ORDER BY labels.position
+        """,
+        (board_id,),
+    ).fetchall()
+    grouped: dict[str, list[str]] = {}
+    for row in rows:
+        grouped.setdefault(row["card_id"], []).append(row["label_id"])
+    return grouped
 
 
 def read_columns_and_cards(
@@ -78,20 +128,20 @@ def read_columns_and_cards(
         (board_id,),
     ).fetchall()
     card_rows = connection.execute(
-        """
-        SELECT id, column_id, title, details, position, priority, due_date,
-               assignee_id, created_at, updated_at
+        f"""
+        SELECT {CARD_COLUMNS}
         FROM cards
-        WHERE board_id = ?
-        ORDER BY column_id, position
+        WHERE cards.board_id = ?
+        ORDER BY cards.column_id, cards.position
         """,
         (board_id,),
     ).fetchall()
+    labels_by_card = read_card_labels(connection, board_id)
 
     card_ids_by_column: dict[str, list[str]] = {row["id"]: [] for row in column_rows}
     cards: dict[str, Any] = {}
     for row in card_rows:
-        cards[row["id"]] = serialize_card(row)
+        cards[row["id"]] = serialize_card(row, labels_by_card.get(row["id"], []))
         card_ids_by_column[row["column_id"]].append(row["id"])
 
     columns = [
@@ -148,6 +198,7 @@ def read(connection: sqlite3.Connection, board_id: int, viewer_role: str) -> dic
         "updatedAt": board["updated_at"],
         "columns": columns,
         "cards": cards,
+        "labels": read_labels(connection, board_id),
         "members": read_members(connection, board_id),
     }
 
@@ -213,6 +264,7 @@ def create(user_id: int, name: str, description: str = "") -> dict[str, Any]:
             (board_id, user_id, timestamp),
         )
         create_default_columns(connection, board_id)
+        create_default_labels(connection, board_id)
         return read(connection, board_id, "owner")
 
 

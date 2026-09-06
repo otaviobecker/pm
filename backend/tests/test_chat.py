@@ -355,3 +355,77 @@ def test_the_assistant_can_clear_every_card(
 
     assert response.status_code == 200
     assert admin.get(f"/api/boards/{board_id}").json()["cards"] == {}
+
+
+def test_an_assistant_edit_keeps_labels_comments_and_checklists(
+    admin: TestClient, board_id: int, monkeypatch
+) -> None:
+    board = admin.get(f"/api/boards/{board_id}").json()
+    kept = board["columns"][0]["cardIds"][0]
+    dropped = board["columns"][0]["cardIds"][1]
+    label_id = board["labels"][0]["id"]
+    for card_id in (kept, dropped):
+        admin.put(
+            f"/api/boards/{board_id}/cards/{card_id}/labels",
+            json={"labelIds": [label_id]},
+        )
+        admin.post(
+            f"/api/boards/{board_id}/cards/{card_id}/comments",
+            json={"body": "Context that must survive"},
+        )
+        admin.post(
+            f"/api/boards/{board_id}/cards/{card_id}/checklist",
+            json={"title": "Step one"},
+        )
+
+    # The assistant renames one card, moves it, and deletes the other.
+    proposal = admin.get(f"/api/boards/{board_id}").json()
+    proposal["cards"][kept]["title"] = "Renamed by the assistant"
+    proposal["columns"][0]["cardIds"] = []
+    proposal["columns"][2]["cardIds"].insert(0, kept)
+    proposal["cards"].pop(dropped)
+    reply_with(monkeypatch, {"message": "Reorganized.", "board": structured_board(proposal)})
+
+    response = admin.post(
+        f"/api/boards/{board_id}/chat",
+        json={"message": "Tidy the backlog", "history": []},
+    )
+
+    assert response.status_code == 200
+    board = admin.get(f"/api/boards/{board_id}").json()
+    assert board["columns"][2]["cardIds"][0] == kept
+    assert board["cards"][kept]["title"] == "Renamed by the assistant"
+    assert board["cards"][kept]["labelIds"] == [label_id]
+    assert board["cards"][kept]["commentCount"] == 1
+    assert board["cards"][kept]["checklistTotal"] == 1
+
+    detail = admin.get(f"/api/boards/{board_id}/cards/{kept}").json()
+    assert detail["comments"][0]["body"] == "Context that must survive"
+    assert detail["checklist"][0]["title"] == "Step one"
+    assert dropped not in board["cards"]
+
+
+def test_an_assistant_edit_can_still_add_and_reorder_cards(
+    admin: TestClient, board_id: int, monkeypatch
+) -> None:
+    board = admin.get(f"/api/boards/{board_id}").json()
+    first, second = board["columns"][0]["cardIds"][:2]
+    board["columns"][0]["cardIds"] = [second, first]
+    board["cards"]["card-new"] = {
+        "id": "card-new",
+        "title": "Fresh from the assistant",
+        "details": "",
+        "priority": "low",
+        "dueDate": None,
+    }
+    board["columns"][1]["cardIds"].append("card-new")
+    reply_with(monkeypatch, {"message": "Done.", "board": structured_board(board)})
+
+    admin.post(
+        f"/api/boards/{board_id}/chat", json={"message": "Shuffle", "history": []}
+    )
+
+    updated = admin.get(f"/api/boards/{board_id}").json()
+    assert updated["columns"][0]["cardIds"] == [second, first]
+    assert updated["columns"][1]["cardIds"][-1] == "card-new"
+    assert updated["cards"]["card-new"]["priority"] == "low"

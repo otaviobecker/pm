@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{2,31}$")
 
 Priority = Literal["low", "medium", "high", "urgent"]
+LabelColor = Literal["yellow", "blue", "purple", "navy", "gray"]
 BoardRole = Literal["owner", "editor", "viewer"]
 GrantableRole = Literal["editor", "viewer"]
 AccountRole = Literal["admin", "member"]
@@ -87,8 +88,40 @@ class CardResponse(BaseModel):
     priority: Priority
     dueDate: str | None = None
     assigneeId: int | None = None
+    labelIds: list[str] = Field(default_factory=list)
+    commentCount: int = 0
+    checklistTotal: int = 0
+    checklistDone: int = 0
     createdAt: str
     updatedAt: str
+
+
+class CommentResponse(BaseModel):
+    id: int
+    body: str
+    authorId: int | None = None
+    authorName: str
+    createdAt: str
+    updatedAt: str
+
+
+class ChecklistItemResponse(BaseModel):
+    id: int
+    title: str
+    done: bool
+
+
+class CardDetailResponse(CardResponse):
+    boardId: int
+    columnId: str
+    comments: list[CommentResponse]
+    checklist: list[ChecklistItemResponse]
+
+
+class LabelResponse(BaseModel):
+    id: str
+    name: str
+    color: LabelColor
 
 
 class ColumnResponse(BaseModel):
@@ -116,6 +149,7 @@ class BoardResponse(BaseModel):
     updatedAt: str
     columns: list[ColumnResponse]
     cards: dict[str, CardResponse]
+    labels: list[LabelResponse]
     members: list[BoardMemberResponse]
 
 
@@ -161,6 +195,60 @@ class UpdateBoardMemberRequest(BaseModel):
     role: GrantableRole
 
 
+class CardWorkspaceResponse(BaseModel):
+    """A card's detail plus the board behind it, which its rollups changed."""
+
+    card: CardDetailResponse
+    board: BoardResponse
+
+
+class CreateLabelRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=40)
+    color: LabelColor = "blue"
+
+    _validate_name = field_validator("name")(_require_nonblank)
+
+
+class UpdateLabelRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=40)
+    color: LabelColor | None = None
+
+    @field_validator("name")
+    @classmethod
+    def _validate_name(cls, value: str | None) -> str | None:
+        return None if value is None else _require_nonblank(value)
+
+
+class SetCardLabelsRequest(BaseModel):
+    labelIds: list[str] = Field(default_factory=list, max_length=20)
+
+
+class CommentRequest(BaseModel):
+    body: str = Field(min_length=1, max_length=5000)
+
+    _validate_body = field_validator("body")(_require_nonblank)
+
+
+class CreateChecklistItemRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+
+    _validate_title = field_validator("title")(_require_nonblank)
+
+
+class UpdateChecklistItemRequest(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+    done: bool | None = None
+
+    @field_validator("title")
+    @classmethod
+    def _validate_title(cls, value: str | None) -> str | None:
+        return None if value is None else _require_nonblank(value)
+
+
+class MoveChecklistItemRequest(BaseModel):
+    position: int = Field(ge=0)
+
+
 class CreateColumnRequest(BaseModel):
     title: str = Field(min_length=1, max_length=100)
     wipLimit: int | None = Field(default=None, ge=1, le=999)
@@ -189,6 +277,7 @@ class CreateCardRequest(BaseModel):
     priority: Priority = "medium"
     dueDate: date | None = None
     assigneeId: int | None = None
+    labelIds: list[str] = Field(default_factory=list, max_length=20)
 
     _validate_title = field_validator("title")(_require_nonblank)
 

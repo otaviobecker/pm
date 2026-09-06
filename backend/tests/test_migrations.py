@@ -226,3 +226,89 @@ def test_a_failing_migration_leaves_the_version_alone(
         assert connection.execute(
             "SELECT title FROM boards WHERE id = 1"
         ).fetchone()["title"] == "Legacy board"
+
+
+def build_v2_database() -> None:
+    """A version 2 database: boards and cards, but no labels, comments, or checklists."""
+    timestamp = "2026-01-01T00:00:00+00:00"
+    with closing(database.connect()) as connection:
+        connection.executescript(database.BOARD_SCHEMA)
+        connection.execute("PRAGMA user_version = 2")
+        connection.execute(
+            """
+            INSERT INTO users
+                (id, username, display_name, email, password_hash, role, is_active,
+                 created_at, updated_at)
+            VALUES (1, 'user', 'Workspace Admin', '', ?, 'admin', 1, ?, ?)
+            """,
+            (security.hash_password(database.DEFAULT_ADMIN_PASSWORD), timestamp, timestamp),
+        )
+        connection.execute(
+            "INSERT INTO boards (id, owner_id, name, description, archived, created_at, updated_at) "
+            "VALUES (1, 1, 'Legacy v2 board', '', 0, ?, ?)",
+            (timestamp, timestamp),
+        )
+        connection.execute(
+            "INSERT INTO board_members (board_id, user_id, role, created_at) "
+            "VALUES (1, 1, 'owner', ?)",
+            (timestamp,),
+        )
+        database.create_default_columns(connection, 1)
+        connection.execute(
+            """
+            INSERT INTO cards
+                (id, board_id, column_id, title, details, position, priority, due_date,
+                 assignee_id, created_at, updated_at)
+            VALUES ('card-1', 1, 'col-backlog', 'Legacy v2 card', '', 0, 'high', NULL,
+                    NULL, ?, ?)
+            """,
+            (timestamp, timestamp),
+        )
+
+
+def test_a_v2_database_gains_labels_comments_and_checklists(
+    isolated_database, make_client
+) -> None:
+    build_v2_database()
+
+    client = make_client()
+    client.post("/api/auth/login", json={"username": "user", "password": "password"})
+
+    board = client.get("/api/boards/1").json()
+    assert board["name"] == "Legacy v2 board"
+    assert [label["name"] for label in board["labels"]] == [
+        name for _, name, _ in database.DEFAULT_LABELS
+    ]
+    card = board["cards"]["card-1"]
+    assert (card["title"], card["priority"]) == ("Legacy v2 card", "high")
+    assert (card["labelIds"], card["commentCount"], card["checklistTotal"]) == ([], 0, 0)
+
+    detail = client.get("/api/boards/1/cards/card-1").json()
+    assert detail["comments"] == []
+    assert detail["checklist"] == []
+
+
+def test_the_v2_upgrade_gives_every_existing_board_labels(
+    isolated_database, make_client
+) -> None:
+    build_v2_database()
+    timestamp = "2026-01-01T00:00:00+00:00"
+    with closing(database.connect()) as connection:
+        connection.execute(
+            "INSERT INTO boards (id, owner_id, name, description, archived, created_at, updated_at) "
+            "VALUES (2, 1, 'Second board', '', 0, ?, ?)",
+            (timestamp, timestamp),
+        )
+        connection.execute(
+            "INSERT INTO board_members (board_id, user_id, role, created_at) "
+            "VALUES (2, 1, 'owner', ?)",
+            (timestamp,),
+        )
+        database.create_default_columns(connection, 2)
+
+    client = make_client()
+    client.post("/api/auth/login", json={"username": "user", "password": "password"})
+
+    for board_id in (1, 2):
+        labels = client.get(f"/api/boards/{board_id}").json()["labels"]
+        assert len(labels) == len(database.DEFAULT_LABELS)

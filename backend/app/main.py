@@ -15,7 +15,7 @@ from app.errors import (
 )
 from app.middleware import limit_request_body_size
 from app.repositories import sessions
-from app.routers import auth, boards, cards, chat, users
+from app.routers import auth, boards, card_details, cards, chat, users
 
 # Defaults to the development fallback page; the Docker build and the browser
 # tests point this at the exported Next.js frontend.
@@ -79,6 +79,7 @@ def health() -> dict[str, str]:
 app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(boards.router)
+app.include_router(card_details.router)
 app.include_router(cards.router)
 app.include_router(chat.router)
 

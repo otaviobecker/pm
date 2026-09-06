@@ -27,6 +27,7 @@ def create_card(
         priority=payload.priority,
         due_date=payload.dueDate.isoformat() if payload.dueDate else None,
         assignee_id=payload.assigneeId,
+        label_ids=payload.labelIds,
     )
 
 

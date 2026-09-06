@@ -9,7 +9,7 @@ from typing import Iterator
 
 from app import security
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 DEFAULT_ADMIN_USERNAME = "user"
 DEFAULT_ADMIN_PASSWORD = "password"
@@ -20,6 +20,17 @@ DEFAULT_COLUMNS = [
     ("col-progress", "In Progress"),
     ("col-review", "Review"),
     ("col-done", "Done"),
+]
+
+# Labels are restricted to the product's five colors, named rather than hex so the
+# frontend owns the exact values.
+LABEL_COLORS = ["yellow", "blue", "purple", "navy", "gray"]
+
+DEFAULT_LABELS = [
+    ("label-feature", "Feature", "blue"),
+    ("label-bug", "Bug", "purple"),
+    ("label-chore", "Chore", "gray"),
+    ("label-urgent", "Needs decision", "yellow"),
 ]
 
 SEED_BOARD_NAME = "Kanban Studio"
@@ -38,7 +49,7 @@ SEED_CARDS = [
     ("col-done", "Close onboarding sprint", "Document release notes and share internally.", "low"),
 ]
 
-SCHEMA = """
+BOARD_SCHEMA = """
 CREATE TABLE users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT NOT NULL UNIQUE CHECK (length(trim(username)) > 0),
@@ -115,6 +126,54 @@ CREATE INDEX cards_board ON cards (board_id);
 CREATE INDEX cards_assignee ON cards (assignee_id);
 """
 
+# Added in schema version 3: the tables that turn a card into a work item.
+CARD_DETAIL_SCHEMA = """
+CREATE TABLE labels (
+    id TEXT NOT NULL,
+    board_id INTEGER NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
+    name TEXT NOT NULL CHECK (length(trim(name)) > 0),
+    color TEXT NOT NULL CHECK (color IN ('yellow', 'blue', 'purple', 'navy', 'gray')),
+    position INTEGER NOT NULL CHECK (position >= 0),
+    PRIMARY KEY (board_id, id),
+    UNIQUE (board_id, position)
+);
+
+CREATE TABLE card_labels (
+    card_id TEXT NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+    board_id INTEGER NOT NULL,
+    label_id TEXT NOT NULL,
+    PRIMARY KEY (card_id, label_id),
+    FOREIGN KEY (board_id, label_id) REFERENCES labels(board_id, id) ON DELETE CASCADE
+);
+
+CREATE INDEX card_labels_label ON card_labels (board_id, label_id);
+
+CREATE TABLE card_comments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    card_id TEXT NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+    author_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    body TEXT NOT NULL CHECK (length(trim(body)) > 0),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE INDEX card_comments_card ON card_comments (card_id);
+
+CREATE TABLE checklist_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    card_id TEXT NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+    title TEXT NOT NULL CHECK (length(trim(title)) > 0),
+    done INTEGER NOT NULL DEFAULT 0 CHECK (done IN (0, 1)),
+    position INTEGER NOT NULL CHECK (position >= 0),
+    created_at TEXT NOT NULL,
+    UNIQUE (card_id, position)
+);
+
+CREATE INDEX checklist_items_card ON checklist_items (card_id);
+"""
+
+SCHEMA = BOARD_SCHEMA + CARD_DETAIL_SCHEMA
+
 
 def now() -> str:
     return datetime.now(UTC).isoformat()
@@ -164,7 +223,8 @@ def migrate_v1_to_v2(connection: sqlite3.Connection) -> None:
         ALTER TABLE cards RENAME TO cards_v1;
         """
     )
-    create_schema(connection)
+    # Build the schema as version 2 defined it; later steps add the rest.
+    connection.executescript(BOARD_SCHEMA)
     timestamp = now()
     # v1 stored no credentials, so migrated accounts get an unusable hash until the
     # seeding step (or an administrator) sets a real password.
@@ -215,10 +275,18 @@ def migrate_v1_to_v2(connection: sqlite3.Connection) -> None:
     )
 
 
+def migrate_v2_to_v3(connection: sqlite3.Connection) -> None:
+    """Add labels, comments, and checklists, and give existing boards the defaults."""
+    connection.executescript(CARD_DETAIL_SCHEMA)
+    for row in connection.execute("SELECT id FROM boards").fetchall():
+        create_default_labels(connection, row["id"])
+
+
 # Keyed by the version a step upgrades *from*. Version 0 is an empty file and is
 # handled separately: it gets the current schema outright rather than replaying history.
 MIGRATIONS = {
     1: migrate_v1_to_v2,
+    2: migrate_v2_to_v3,
 }
 
 
@@ -308,6 +376,16 @@ def create_default_columns(connection: sqlite3.Connection, board_id: int) -> Non
     )
 
 
+def create_default_labels(connection: sqlite3.Connection, board_id: int) -> None:
+    connection.executemany(
+        "INSERT INTO labels (id, board_id, name, color, position) VALUES (?, ?, ?, ?, ?)",
+        [
+            (label_id, board_id, name, color, position)
+            for position, (label_id, name, color) in enumerate(DEFAULT_LABELS)
+        ],
+    )
+
+
 def seed_starter_board(connection: sqlite3.Connection, user_id: int) -> int:
     """Create a board owned by ``user_id``, with the default columns and demo cards."""
     timestamp = now()
@@ -323,6 +401,7 @@ def seed_starter_board(connection: sqlite3.Connection, user_id: int) -> int:
         (board_id, user_id, timestamp),
     )
     create_default_columns(connection, board_id)
+    create_default_labels(connection, board_id)
     positions: dict[str, int] = {}
     for index, (column_id, title, details, priority) in enumerate(SEED_CARDS, start=1):
         position = positions.get(column_id, 0)
