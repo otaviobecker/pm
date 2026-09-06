@@ -118,6 +118,23 @@ class CardDetailResponse(CardResponse):
     checklist: list[ChecklistItemResponse]
 
 
+class AssignedCardResponse(CardResponse):
+    boardId: int
+    boardName: str
+    columnTitle: str
+
+
+class ActivityEntryResponse(BaseModel):
+    id: int
+    actorId: int | None = None
+    actorName: str
+    action: str
+    subject: str
+    detail: str
+    cardId: str | None = None
+    createdAt: str
+
+
 class LabelResponse(BaseModel):
     id: str
     name: str

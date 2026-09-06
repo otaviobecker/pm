@@ -9,7 +9,7 @@ from typing import Iterator
 
 from app import security
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 DEFAULT_ADMIN_USERNAME = "user"
 DEFAULT_ADMIN_PASSWORD = "password"
@@ -172,7 +172,24 @@ CREATE TABLE checklist_items (
 CREATE INDEX checklist_items_card ON checklist_items (card_id);
 """
 
-SCHEMA = BOARD_SCHEMA + CARD_DETAIL_SCHEMA
+# Added in schema version 4: an append-only record of who changed what.
+ACTIVITY_SCHEMA = """
+CREATE TABLE activity (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    board_id INTEGER NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
+    actor_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    actor_name TEXT NOT NULL,
+    action TEXT NOT NULL,
+    subject TEXT NOT NULL DEFAULT '',
+    detail TEXT NOT NULL DEFAULT '',
+    card_id TEXT,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX activity_board ON activity (board_id, id DESC);
+"""
+
+SCHEMA = BOARD_SCHEMA + CARD_DETAIL_SCHEMA + ACTIVITY_SCHEMA
 
 
 def now() -> str:
@@ -282,11 +299,17 @@ def migrate_v2_to_v3(connection: sqlite3.Connection) -> None:
         create_default_labels(connection, row["id"])
 
 
+def migrate_v3_to_v4(connection: sqlite3.Connection) -> None:
+    """Add the activity log. Existing boards simply start with an empty history."""
+    connection.executescript(ACTIVITY_SCHEMA)
+
+
 # Keyed by the version a step upgrades *from*. Version 0 is an empty file and is
 # handled separately: it gets the current schema outright rather than replaying history.
 MIGRATIONS = {
     1: migrate_v1_to_v2,
     2: migrate_v2_to_v3,
+    3: migrate_v3_to_v4,
 }
 
 

@@ -9,7 +9,7 @@ from typing import Any
 
 from app.database import now, transaction
 from app.errors import InvalidRequestError
-from app.repositories import boards
+from app.repositories import activity, boards
 
 PRIORITIES = {"low", "medium", "high", "urgent"}
 
@@ -58,15 +58,24 @@ def replace(user_id: int, board_id: int, board: dict[str, Any]) -> dict[str, Any
                 "UPDATE columns SET title = ? WHERE board_id = ? AND id = ?",
                 (column["title"].strip(), board_id, column["id"]),
             )
-        apply_cards(connection, board_id, board)
+        touched = apply_cards(connection, board_id, board)
+        activity.record(
+            connection,
+            board_id,
+            user_id,
+            "assistant.updated",
+            "",
+            f"{touched} cards added or removed" if touched else "cards rearranged",
+        )
         boards.touch(connection, board_id)
         return boards.read(connection, board_id, role)
 
 
 def apply_cards(
     connection: sqlite3.Connection, board_id: int, board: dict[str, Any]
-) -> None:
-    """Reconcile the board's cards with the proposal.
+) -> int:
+    """Reconcile the board's cards with the proposal, returning how many were
+    added or removed.
 
     Cards are updated in place rather than replaced so that everything hanging off
     a card -- its labels, comments, and checklist -- survives an assistant edit.
@@ -139,6 +148,7 @@ def apply_cards(
                 "UPDATE cards SET position = ? WHERE board_id = ? AND id = ?",
                 (position, board_id, card_id),
             )
+    return len(removed) + len(set(board["cards"]) - existing)
 
 
 def guard_foreign_card_ids(

@@ -6,7 +6,7 @@ from typing import Any
 
 from app.database import now, transaction
 from app.errors import InvalidRequestError, NotFoundError
-from app.repositories import boards, columns, labels
+from app.repositories import activity, boards, columns, labels
 
 # Cards are parked in these ranges while positions are rewritten so the
 # (board_id, column_id, position) unique index never sees a duplicate.
@@ -134,6 +134,9 @@ def create(
         )
         if label_ids:
             labels.set_for_card(connection, board_id, card_id, label_ids)
+        activity.record(
+            connection, board_id, user_id, "card.created", title.strip(), card_id=card_id
+        )
         boards.touch(connection, board_id)
         return boards.read(connection, board_id, role)
 
@@ -144,7 +147,7 @@ def update(
     """Apply the supplied subset of card fields. Unlisted fields are left alone."""
     with transaction() as connection:
         role = boards.require_access(connection, user_id, board_id, minimum="editor")
-        require_card(connection, board_id, card_id)
+        card = require_card(connection, board_id, card_id)
         assignments: list[str] = []
         values: list[Any] = []
         for field, column in UPDATABLE_FIELDS.items():
@@ -165,6 +168,15 @@ def update(
             f"UPDATE cards SET {', '.join(assignments)} WHERE board_id = ? AND id = ?",
             values,
         )
+        activity.record(
+            connection,
+            board_id,
+            user_id,
+            "card.updated",
+            changes.get("title") or card["title"],
+            "changed " + ", ".join(field for field in UPDATABLE_FIELDS if field in changes),
+            card_id=card_id,
+        )
         boards.touch(connection, board_id)
         return boards.read(connection, board_id, role)
 
@@ -179,7 +191,7 @@ def move(
     with transaction() as connection:
         role = boards.require_access(connection, user_id, board_id, minimum="editor")
         card = require_card(connection, board_id, card_id)
-        columns.require_column(connection, board_id, target_column_id)
+        target = columns.require_column(connection, board_id, target_column_id)
         source_column_id = card["column_id"]
 
         source_ids = column_card_ids(connection, board_id, source_column_id)
@@ -207,6 +219,16 @@ def move(
             "UPDATE cards SET updated_at = ? WHERE board_id = ? AND id = ?",
             (now(), board_id, card_id),
         )
+        if source_column_id != target_column_id:
+            activity.record(
+                connection,
+                board_id,
+                user_id,
+                "card.moved",
+                card["title"],
+                f"to {target['title']}",
+                card_id=card_id,
+            )
         boards.touch(connection, board_id)
         return boards.read(connection, board_id, role)
 
@@ -222,6 +244,9 @@ def delete(user_id: int, board_id: int, card_id: str) -> dict[str, Any]:
             connection,
             board_id,
             column_card_ids(connection, board_id, card["column_id"]),
+        )
+        activity.record(
+            connection, board_id, user_id, "card.deleted", card["title"], card_id=card_id
         )
         boards.touch(connection, board_id)
         return boards.read(connection, board_id, role)

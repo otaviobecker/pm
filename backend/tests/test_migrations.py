@@ -312,3 +312,39 @@ def test_the_v2_upgrade_gives_every_existing_board_labels(
     for board_id in (1, 2):
         labels = client.get(f"/api/boards/{board_id}").json()["labels"]
         assert len(labels) == len(database.DEFAULT_LABELS)
+
+
+def build_v3_database() -> None:
+    """A version 3 database: cards with labels and checklists, but no activity log."""
+    build_v2_database()
+    with closing(database.connect()) as connection:
+        connection.executescript(database.CARD_DETAIL_SCHEMA)
+        connection.execute("PRAGMA user_version = 3")
+        database.create_default_labels(connection, 1)
+        connection.execute(
+            "INSERT INTO card_labels (card_id, board_id, label_id) "
+            "VALUES ('card-1', 1, 'label-bug')"
+        )
+        connection.execute(
+            "INSERT INTO checklist_items (card_id, title, done, position, created_at) "
+            "VALUES ('card-1', 'Still here', 0, 0, '2026-01-01T00:00:00+00:00')"
+        )
+
+
+def test_a_v3_database_gains_an_activity_log(isolated_database, make_client) -> None:
+    build_v3_database()
+
+    client = make_client()
+    client.post("/api/auth/login", json={"username": "user", "password": "password"})
+
+    # The upgrade adds history going forward without inventing any for the past.
+    assert client.get("/api/boards/1/activity").json() == []
+
+    board = client.get("/api/boards/1").json()
+    assert board["cards"]["card-1"]["labelIds"] == ["label-bug"]
+    assert board["cards"]["card-1"]["checklistTotal"] == 1
+
+    client.post("/api/boards/1/columns", json={"title": "Blocked"})
+    assert [entry["action"] for entry in client.get("/api/boards/1/activity").json()] == [
+        "column.created"
+    ]

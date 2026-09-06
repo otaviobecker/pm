@@ -6,7 +6,7 @@ from typing import Any
 
 from app.database import transaction
 from app.errors import InvalidRequestError, NotFoundError
-from app.repositories import boards
+from app.repositories import activity, boards
 
 MAX_LABELS = 20
 # Positions are rewritten through this range so the (board_id, position) unique
@@ -61,6 +61,7 @@ def create(user_id: int, board_id: int, name: str, color: str) -> dict[str, Any]
             "INSERT INTO labels (id, board_id, name, color, position) VALUES (?, ?, ?, ?, ?)",
             (f"label-{token_urlsafe(8)}", board_id, name.strip(), color, len(existing)),
         )
+        activity.record(connection, board_id, user_id, "label.created", name.strip(), color)
         boards.touch(connection, board_id)
         return boards.read(connection, board_id, role)
 
@@ -93,12 +94,13 @@ def delete(user_id: int, board_id: int, label_id: str) -> dict[str, Any]:
     """Remove a label from the board and from every card carrying it."""
     with transaction() as connection:
         role = boards.require_access(connection, user_id, board_id, minimum="editor")
-        require_label(connection, board_id, label_id)
+        label = require_label(connection, board_id, label_id)
         connection.execute(
             "DELETE FROM labels WHERE board_id = ? AND id = ?", (board_id, label_id)
         )
         remaining = ordered_ids(connection, board_id)
         set_positions(connection, board_id, remaining)
+        activity.record(connection, board_id, user_id, "label.deleted", label["name"])
         boards.touch(connection, board_id)
         return boards.read(connection, board_id, role)
 

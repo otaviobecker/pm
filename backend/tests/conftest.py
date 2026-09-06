@@ -6,11 +6,22 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from app import auth, database
+from app import auth, database, security
 from app.main import app
 
 DEFAULT_USERNAME = database.DEFAULT_ADMIN_USERNAME
 DEFAULT_PASSWORD = database.DEFAULT_ADMIN_PASSWORD
+
+
+@pytest.fixture(autouse=True)
+def fast_password_hashing(monkeypatch) -> None:
+    """Hash at a fraction of the production cost.
+
+    Every test seeds an account and signs in, so full-strength PBKDF2 dominates
+    the suite's runtime. The iteration count travels inside each stored digest,
+    so verification is unaffected.
+    """
+    monkeypatch.setattr(security, "ITERATIONS", 1_000)
 
 
 @pytest.fixture(autouse=True)

@@ -12,6 +12,7 @@ from app.database import (
     transaction,
 )
 from app.errors import ConflictError, InvalidRequestError, NotFoundError, PermissionDeniedError
+from app.repositories import activity
 
 ROLE_RANK = {"viewer": 0, "editor": 1, "owner": 2}
 
@@ -265,6 +266,7 @@ def create(user_id: int, name: str, description: str = "") -> dict[str, Any]:
         )
         create_default_columns(connection, board_id)
         create_default_labels(connection, board_id)
+        activity.record(connection, board_id, user_id, "board.created", name.strip())
         return read(connection, board_id, "owner")
 
 
@@ -284,18 +286,33 @@ def update(
             "SELECT name, description, archived FROM boards WHERE id = ?",
             (board_id,),
         ).fetchone()
+        next_name = (name if name is not None else current["name"]).strip()
+        next_archived = archived if archived is not None else bool(current["archived"])
         connection.execute(
             "UPDATE boards SET name = ?, description = ?, archived = ?, updated_at = ? WHERE id = ?",
             (
-                (name if name is not None else current["name"]).strip(),
+                next_name,
                 (
                     description if description is not None else current["description"]
                 ).strip(),
-                int(archived if archived is not None else bool(current["archived"])),
+                int(next_archived),
                 now(),
                 board_id,
             ),
         )
+        if next_name != current["name"]:
+            activity.record(
+                connection, board_id, user_id, "board.renamed", next_name,
+                f"was {current['name']}",
+            )
+        if next_archived != bool(current["archived"]):
+            activity.record(
+                connection,
+                board_id,
+                user_id,
+                "board.archived" if next_archived else "board.restored",
+                next_name,
+            )
         return read(connection, board_id, role)
 
 
@@ -320,6 +337,9 @@ def add_member(user_id: int, board_id: int, username: str, role: str) -> dict[st
             "INSERT INTO board_members (board_id, user_id, role, created_at) VALUES (?, ?, ?, ?)",
             (board_id, member["id"], role, now()),
         )
+        activity.record(
+            connection, board_id, user_id, "member.added", username.strip(), f"as {role}"
+        )
         return read(connection, board_id, "owner")
 
 
@@ -336,6 +356,14 @@ def update_member(
         connection.execute(
             "UPDATE board_members SET role = ? WHERE board_id = ? AND user_id = ?",
             (role, board_id, member_id),
+        )
+        activity.record(
+            connection,
+            board_id,
+            user_id,
+            "member.role_changed",
+            activity.actor_name(connection, member_id),
+            f"now {role}",
         )
         return read(connection, board_id, "owner")
 
@@ -354,9 +382,18 @@ def remove_member(user_id: int, board_id: int, member_id: int) -> dict[str, Any]
             raise InvalidRequestError(
                 "The board owner cannot be removed; delete the board instead"
             )
+        removed_name = activity.actor_name(connection, member_id)
         connection.execute(
             "DELETE FROM board_members WHERE board_id = ? AND user_id = ?",
             (board_id, member_id),
+        )
+        activity.record(
+            connection,
+            board_id,
+            user_id,
+            "member.removed",
+            removed_name,
+            "left the board" if leaving else "",
         )
         # Cards keep their history, but an unassigned member should not stay attached.
         connection.execute(

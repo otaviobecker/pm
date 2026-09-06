@@ -6,7 +6,7 @@ from typing import Any
 
 from app.database import transaction
 from app.errors import InvalidRequestError, NotFoundError
-from app.repositories import boards
+from app.repositories import activity, boards
 
 MAX_COLUMNS = 12
 # Positions are rewritten through this range so the (board_id, position) unique
@@ -66,6 +66,7 @@ def create(
             "INSERT INTO columns (id, board_id, title, position, wip_limit) VALUES (?, ?, ?, ?, ?)",
             (f"col-{token_urlsafe(8)}", board_id, title.strip(), len(existing), wip_limit),
         )
+        activity.record(connection, board_id, user_id, "column.created", title.strip())
         boards.touch(connection, board_id)
         return boards.read(connection, board_id, role)
 
@@ -87,15 +88,25 @@ def update(
             next_limit = None
         elif wip_limit is not None:
             next_limit = wip_limit
+        next_title = (title if title is not None else current["title"]).strip()
         connection.execute(
             "UPDATE columns SET title = ?, wip_limit = ? WHERE board_id = ? AND id = ?",
-            (
-                (title if title is not None else current["title"]).strip(),
-                next_limit,
-                board_id,
-                column_id,
-            ),
+            (next_title, next_limit, board_id, column_id),
         )
+        if next_title != current["title"]:
+            activity.record(
+                connection, board_id, user_id, "column.renamed", next_title,
+                f"was {current['title']}",
+            )
+        if next_limit != current["wip_limit"]:
+            activity.record(
+                connection,
+                board_id,
+                user_id,
+                "column.wip_limit",
+                next_title,
+                "no limit" if next_limit is None else f"limit {next_limit}",
+            )
         boards.touch(connection, board_id)
         return boards.read(connection, board_id, role)
 
@@ -103,11 +114,19 @@ def update(
 def move(user_id: int, board_id: int, column_id: str, position: int) -> dict[str, Any]:
     with transaction() as connection:
         role = boards.require_access(connection, user_id, board_id, minimum="editor")
-        require_column(connection, board_id, column_id)
+        column = require_column(connection, board_id, column_id)
         order = ordered_ids(connection, board_id)
         order.remove(column_id)
         order.insert(max(0, min(position, len(order))), column_id)
         set_positions(connection, board_id, order)
+        activity.record(
+            connection,
+            board_id,
+            user_id,
+            "column.moved",
+            column["title"],
+            f"to position {order.index(column_id) + 1}",
+        )
         boards.touch(connection, board_id)
         return boards.read(connection, board_id, role)
 
@@ -121,7 +140,7 @@ def delete(
 ) -> dict[str, Any]:
     with transaction() as connection:
         role = boards.require_access(connection, user_id, board_id, minimum="editor")
-        require_column(connection, board_id, column_id)
+        column = require_column(connection, board_id, column_id)
         order = ordered_ids(connection, board_id)
         if len(order) == 1:
             raise InvalidRequestError("A board must keep at least one column")
@@ -164,5 +183,13 @@ def delete(
         )
         order.remove(column_id)
         set_positions(connection, board_id, order)
+        activity.record(
+            connection,
+            board_id,
+            user_id,
+            "column.deleted",
+            column["title"],
+            f"{len(card_ids)} cards moved" if card_ids else "",
+        )
         boards.touch(connection, board_id)
         return boards.read(connection, board_id, role)

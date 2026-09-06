@@ -11,7 +11,7 @@ from typing import Any
 
 from app.database import connect, now, transaction
 from app.errors import NotFoundError, PermissionDeniedError
-from app.repositories import boards, cards, labels
+from app.repositories import activity, boards, cards, labels
 
 # Checklist positions are rewritten through this range so the (card_id, position)
 # unique index never sees a collision mid-update.
@@ -91,8 +91,17 @@ def set_labels(
 ) -> dict[str, Any]:
     with transaction() as connection:
         role = boards.require_access(connection, user_id, board_id, minimum="editor")
-        cards.require_card(connection, board_id, card_id)
+        card = cards.require_card(connection, board_id, card_id)
         labels.set_for_card(connection, board_id, card_id, label_ids)
+        activity.record(
+            connection,
+            board_id,
+            user_id,
+            "card.labeled",
+            card["title"],
+            f"{len(set(label_ids))} labels",
+            card_id=card_id,
+        )
         boards.touch(connection, board_id)
         return result(connection, board_id, card_id, role)
 
@@ -115,7 +124,7 @@ def add_comment(
     """Any board member may comment, including viewers."""
     with transaction() as connection:
         role = boards.require_access(connection, user_id, board_id)
-        cards.require_card(connection, board_id, card_id)
+        card = cards.require_card(connection, board_id, card_id)
         timestamp = now()
         connection.execute(
             """
@@ -123,6 +132,9 @@ def add_comment(
             VALUES (?, ?, ?, ?, ?)
             """,
             (card_id, user_id, body.strip(), timestamp, timestamp),
+        )
+        activity.record(
+            connection, board_id, user_id, "comment.added", card["title"], card_id=card_id
         )
         return result(connection, board_id, card_id, role)
 
@@ -225,17 +237,24 @@ def update_checklist_item(
 ) -> dict[str, Any]:
     with transaction() as connection:
         role = boards.require_access(connection, user_id, board_id, minimum="editor")
-        cards.require_card(connection, board_id, card_id)
+        card = cards.require_card(connection, board_id, card_id)
         current = require_checklist_item(connection, card_id, item_id)
+        next_title = (title if title is not None else current["title"]).strip()
+        next_done = done if done is not None else bool(current["done"])
         connection.execute(
             "UPDATE checklist_items SET title = ?, done = ? WHERE card_id = ? AND id = ?",
-            (
-                (title if title is not None else current["title"]).strip(),
-                int(done if done is not None else bool(current["done"])),
-                card_id,
-                item_id,
-            ),
+            (next_title, int(next_done), card_id, item_id),
         )
+        if next_done and not current["done"]:
+            activity.record(
+                connection,
+                board_id,
+                user_id,
+                "checklist.completed",
+                card["title"],
+                next_title,
+                card_id=card_id,
+            )
         boards.touch(connection, board_id)
         return result(connection, board_id, card_id, role)
 

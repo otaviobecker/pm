@@ -4,6 +4,7 @@ from fastapi import APIRouter, Query, status
 
 from app.auth import AuthenticatedUser
 from app.models import (
+    ActivityEntryResponse,
     AddBoardMemberRequest,
     BoardResponse,
     BoardSummaryResponse,
@@ -14,7 +15,7 @@ from app.models import (
     UpdateBoardRequest,
     UpdateColumnRequest,
 )
-from app.repositories import boards, columns
+from app.repositories import activity, boards, columns
 
 router = APIRouter(prefix="/api/boards", tags=["boards"])
 
@@ -53,6 +54,16 @@ def update_board(
 @router.delete("/{board_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_board(board_id: int, user: AuthenticatedUser) -> None:
     boards.delete(user.id, board_id)
+
+
+@router.get("/{board_id}/activity", response_model=list[ActivityEntryResponse])
+def read_activity(
+    board_id: int,
+    user: AuthenticatedUser,
+    limit: int = Query(default=50, ge=1, le=200),
+    before: int | None = Query(default=None, ge=1),
+) -> list[dict]:
+    return activity.list_for_board(user.id, board_id, limit=limit, before=before)
 
 
 @router.post("/{board_id}/members", response_model=BoardResponse)

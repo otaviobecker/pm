@@ -5,12 +5,13 @@ from fastapi import APIRouter, Response, status
 from app.auth import AdminUser, AuthenticatedUser, clear_session_cookie
 from app.models import (
     AdminUserUpdateRequest,
+    AssignedCardResponse,
     ChangePasswordRequest,
     DirectoryUserResponse,
     UpdateProfileRequest,
     UserResponse,
 )
-from app.repositories import users
+from app.repositories import assignments, users
 
 router = APIRouter(prefix="/api", tags=["users"])
 
@@ -19,6 +20,12 @@ router = APIRouter(prefix="/api", tags=["users"])
 def list_directory(_: AuthenticatedUser) -> list[dict]:
     """Active accounts, used to pick board members and card assignees."""
     return users.directory()
+
+
+@router.get("/users/me/cards", response_model=list[AssignedCardResponse])
+def read_my_cards(user: AuthenticatedUser) -> list[dict]:
+    """Everything assigned to the caller, across every board they can open."""
+    return assignments.assigned_to(user.id)
 
 
 @router.patch("/users/me", response_model=UserResponse)
