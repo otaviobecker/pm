@@ -319,3 +319,15 @@ deployment, and session-only chat history.
 - A board is only reachable by its members, and each role can do exactly what it should.
 - An existing version 1 database keeps its data after upgrading.
 - Backend statement coverage stays above 95 percent and all suites pass.
+
+## Next candidates
+
+Not started, in rough order of value to the product:
+
+- Card comments and a per-board activity feed (schema version 3).
+- Labels on cards, filterable alongside priority and assignee.
+- Checklists on a card, with a completion count on the card face.
+- A card detail view, so long descriptions and future card metadata are not
+  edited inside the column.
+- A cross-board "my work" view of everything assigned to the signed-in user.
+- Board templates, so a new board can start from a saved column set.
