@@ -8,6 +8,11 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],
     globals: true,
+    // One jsdom environment at a time. Running every file in parallel needs more
+    // memory than a modest machine has, and the thrashing made slow tests time
+    // out rather than finish.
+    fileParallelism: false,
+    testTimeout: 15_000,
     coverage: {
       reporter: ["text", "html"],
       include: ["src/**/*.{ts,tsx}"],

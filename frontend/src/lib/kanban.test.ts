@@ -1,13 +1,21 @@
 import {
   canEdit,
+  checklistComplete,
+  describeActivity,
   dueState,
   formatDueDate,
+  formatMoment,
+  groupAssignments,
   initials,
   isOwner,
+  labelsFor,
   moveCard,
   wipState,
+  type ActivityEntry,
+  type AssignedCard,
   type Column,
 } from "@/lib/kanban";
+import { makeBoard, makeCard } from "@/test/fixtures";
 
 const columns = (): Column[] => [
   { id: "a", title: "A", wipLimit: null, cardIds: ["1", "2"] },
@@ -109,5 +117,101 @@ describe("role helpers", () => {
   it("recognizes the owner", () => {
     expect(isOwner("owner")).toBe(true);
     expect(isOwner("editor")).toBe(false);
+  });
+});
+
+describe("card rollups", () => {
+  it("only calls a checklist complete when it has items and all are done", () => {
+    expect(checklistComplete(makeCard("a", "A"))).toBe(false);
+    expect(
+      checklistComplete(
+        makeCard("a", "A", { checklistTotal: 2, checklistDone: 1 })
+      )
+    ).toBe(false);
+    expect(
+      checklistComplete(
+        makeCard("a", "A", { checklistTotal: 2, checklistDone: 2 })
+      )
+    ).toBe(true);
+  });
+
+  it("resolves a card's labels in board order and skips unknown ids", () => {
+    const board = makeBoard();
+    const card = makeCard("a", "A", {
+      labelIds: ["label-bug", "label-gone", "label-feature"],
+    });
+
+    expect(labelsFor(board, card).map((label) => label.name)).toEqual([
+      "Bug",
+      "Feature",
+    ]);
+  });
+});
+
+describe("activity phrasing", () => {
+  const entry = (action: string): ActivityEntry => ({
+    id: 1,
+    actorId: 1,
+    actorName: "Casey",
+    action,
+    subject: "",
+    detail: "",
+    cardId: null,
+    createdAt: "2026-06-15T09:30:00+00:00",
+  });
+
+  it("phrases the actions it knows", () => {
+    expect(describeActivity(entry("card.created"))).toBe("added");
+    expect(describeActivity(entry("comment.added"))).toBe("commented on");
+  });
+
+  it("falls back to the raw action otherwise", () => {
+    expect(describeActivity(entry("card.teleported"))).toBe("card.teleported");
+  });
+
+  it("formats a stored timestamp", () => {
+    expect(formatMoment("2026-06-15T09:30:00Z")).toMatch(/15/);
+  });
+});
+
+describe("groupAssignments", () => {
+  const today = new Date(2026, 5, 15);
+  const card = (id: string, dueDate: string | null): AssignedCard => ({
+    ...makeCard(id, id),
+    dueDate,
+    boardId: 1,
+    boardName: "Board",
+    columnTitle: "Backlog",
+  });
+
+  it("returns groups in a fixed order, omitting empty ones", () => {
+    const grouped = groupAssignments(
+      [
+        card("undated", null),
+        card("later", "2026-08-01"),
+        card("overdue", "2026-06-01"),
+      ],
+      today
+    );
+
+    expect(grouped.map(([group]) => group)).toEqual([
+      "overdue",
+      "later",
+      "none",
+    ]);
+  });
+
+  it("keeps several cards inside one group", () => {
+    const grouped = groupAssignments(
+      [card("a", "2026-06-01"), card("b", "2026-06-02")],
+      today
+    );
+
+    expect(grouped).toHaveLength(1);
+    expect(grouped[0][1].map((item) => item.id)).toEqual(["a", "b"]);
+  });
+
+  it("has nothing to group when nothing is assigned", () => {
+    expect(groupAssignments([], today)).toEqual([]);
   });
 });

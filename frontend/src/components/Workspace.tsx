@@ -2,14 +2,17 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AccountDialog } from "@/components/AccountDialog";
+import { ActivityDialog } from "@/components/ActivityDialog";
 import { BoardRail } from "@/components/BoardRail";
 import { BoardSettingsDialog } from "@/components/BoardSettingsDialog";
 import { CardDetailDialog } from "@/components/CardDetailDialog";
 import { ChatSidebar } from "@/components/ChatSidebar";
 import { KanbanBoard } from "@/components/KanbanBoard";
+import { MyWorkView } from "@/components/MyWorkView";
 import {
   BoardIcon,
   CloseIcon,
+  HistoryIcon,
   SettingsIcon,
   SparkleIcon,
 } from "@/components/icons";
@@ -20,6 +23,7 @@ import {
   getBoards,
   getCard,
   getDirectory,
+  getMyCards,
   type CardWorkspace,
   type DirectoryUser,
   type User,
@@ -27,6 +31,7 @@ import {
 import {
   canEdit,
   initials,
+  type AssignedCard,
   type BoardData,
   type BoardSummary,
   type CardDetail,
@@ -71,7 +76,11 @@ export const Workspace = ({ user, onUserChange, onLogout }: WorkspaceProps) => {
   const [showArchived, setShowArchived] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [openCard, setOpenCard] = useState<CardDetail | null>(null);
+  const [showingMyWork, setShowingMyWork] = useState(false);
+  const [myCards, setMyCards] = useState<AssignedCard[]>([]);
+  const [loadingMyWork, setLoadingMyWork] = useState(false);
 
   const describe = (caught: unknown, fallback: string) =>
     caught instanceof ApiError && caught.detail ? caught.detail : fallback;
@@ -212,18 +221,35 @@ export const Workspace = ({ user, onUserChange, onLogout }: WorkspaceProps) => {
     []
   );
 
-  const showCard = useCallback(
-    async (cardId: string) => {
-      if (activeBoardId === null) {
-        return;
-      }
-      try {
-        setOpenCard(await getCard(activeBoardId, cardId));
-      } catch (caught) {
-        setError(describe(caught, "That card could not be opened."));
-      }
+  const showCard = useCallback(async (boardId: number, cardId: string) => {
+    try {
+      setOpenCard(await getCard(boardId, cardId));
+    } catch (caught) {
+      setError(describe(caught, "That card could not be opened."));
+    }
+  }, []);
+
+  const showMyWork = useCallback(async () => {
+    setShowingMyWork(true);
+    setLoadingMyWork(true);
+    try {
+      setMyCards(await getMyCards());
+      setError("");
+    } catch (caught) {
+      setError(describe(caught, "Unable to load your assigned cards."));
+    } finally {
+      setLoadingMyWork(false);
+    }
+  }, []);
+
+  /** Jump from the assignment list to the card on its own board. */
+  const openAssignedCard = useCallback(
+    (boardId: number, cardId: string) => {
+      setShowingMyWork(false);
+      setActiveBoardId(boardId);
+      void showCard(boardId, cardId);
     },
-    [activeBoardId]
+    [showCard]
   );
 
   const membersById = useMemo(() => {
@@ -242,7 +268,12 @@ export const Workspace = ({ user, onUserChange, onLogout }: WorkspaceProps) => {
         boards={summaries}
         activeBoardId={activeBoardId}
         showArchived={showArchived}
-        onSelect={setActiveBoardId}
+        showingMyWork={showingMyWork}
+        onShowMyWork={() => void showMyWork()}
+        onSelect={(boardId) => {
+          setShowingMyWork(false);
+          setActiveBoardId(boardId);
+        }}
         onToggleArchived={() => setShowArchived((current) => !current)}
         onCreate={(name) => run(() => createBoard(name))}
       />
@@ -257,28 +288,41 @@ export const Workspace = ({ user, onUserChange, onLogout }: WorkspaceProps) => {
           </span>
           <div className="min-w-0">
             <h1 className="truncate font-display text-lg font-semibold leading-none text-[var(--navy-dark)]">
-              {board?.name ?? "Kanban Studio"}
+              {showingMyWork ? "My work" : board?.name ?? "Kanban Studio"}
             </h1>
             <p className="mt-1 truncate text-[10px] font-semibold uppercase tracking-[0.3em] text-[var(--gray-text)]">
-              {board
-                ? `${board.role}${board.archived ? " · archived" : ""} · ${
-                    board.members.length
-                  } member${board.members.length === 1 ? "" : "s"}`
-                : "No board selected"}
+              {showingMyWork
+                ? `${myCards.length} assigned to you`
+                : board
+                  ? `${board.role}${board.archived ? " · archived" : ""} · ${
+                      board.members.length
+                    } member${board.members.length === 1 ? "" : "s"}`
+                  : "No board selected"}
             </p>
           </div>
 
           <div className="ml-auto flex items-center gap-2">
-            {board ? (
-              <button
-                type="button"
-                onClick={() => setSettingsOpen(true)}
-                className="icon-button"
-                aria-label="Board settings"
-                title="Board settings"
-              >
-                <SettingsIcon width={16} height={16} />
-              </button>
+            {board && !showingMyWork ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setHistoryOpen(true)}
+                  className="icon-button"
+                  aria-label="Board history"
+                  title="Board history"
+                >
+                  <HistoryIcon width={16} height={16} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSettingsOpen(true)}
+                  className="icon-button"
+                  aria-label="Board settings"
+                  title="Board settings"
+                >
+                  <SettingsIcon width={16} height={16} />
+                </button>
+              </>
             ) : null}
             <button
               type="button"
@@ -318,7 +362,13 @@ export const Workspace = ({ user, onUserChange, onLogout }: WorkspaceProps) => {
           </div>
         ) : null}
 
-        {loading ? (
+        {showingMyWork ? (
+          <MyWorkView
+            cards={myCards}
+            loading={loadingMyWork}
+            onOpen={openAssignedCard}
+          />
+        ) : loading ? (
           <p className="grid flex-1 place-items-center text-sm font-semibold text-[var(--gray-text)]">
             Loading board...
           </p>
@@ -329,7 +379,7 @@ export const Workspace = ({ user, onUserChange, onLogout }: WorkspaceProps) => {
             memberNames={membersById}
             members={board.members}
             onRun={run}
-            onOpenCard={(cardId) => void showCard(cardId)}
+            onOpenCard={(cardId) => void showCard(board.id, cardId)}
           />
         ) : (
           <div className="grid flex-1 place-items-center px-6 text-center">
@@ -352,7 +402,7 @@ export const Workspace = ({ user, onUserChange, onLogout }: WorkspaceProps) => {
         ) : null}
       </div>
 
-      {board ? (
+      {board && !showingMyWork ? (
         <ChatSidebar boardId={board.id} onBoardUpdate={setBoard} />
       ) : (
         <div
@@ -391,6 +441,14 @@ export const Workspace = ({ user, onUserChange, onLogout }: WorkspaceProps) => {
           onClose={() => setOpenCard(null)}
           onRun={runCard}
           onRunBoard={run}
+        />
+      ) : null}
+
+      {historyOpen && board ? (
+        <ActivityDialog
+          boardId={board.id}
+          boardName={board.name}
+          onClose={() => setHistoryOpen(false)}
         />
       ) : null}
 

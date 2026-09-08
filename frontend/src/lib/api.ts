@@ -1,5 +1,7 @@
 import type {
   AccountRole,
+  ActivityEntry,
+  AssignedCard,
   BoardData,
   BoardRole,
   BoardSummary,
@@ -397,3 +399,20 @@ export const deleteChecklistItem = (
     `/api/boards/${boardId}/cards/${cardId}/checklist/${itemId}`,
     { method: "DELETE" }
   );
+
+export const getActivity = (
+  boardId: number,
+  options: { limit?: number; before?: number } = {}
+) => {
+  const query = new URLSearchParams();
+  if (options.limit !== undefined) {
+    query.set("limit", String(options.limit));
+  }
+  if (options.before !== undefined) {
+    query.set("before", String(options.before));
+  }
+  const suffix = query.size > 0 ? `?${query}` : "";
+  return request<ActivityEntry[]>(`/api/boards/${boardId}/activity${suffix}`);
+};
+
+export const getMyCards = () => request<AssignedCard[]>("/api/users/me/cards");

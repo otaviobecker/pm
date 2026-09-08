@@ -11,8 +11,10 @@ import {
   getAllUsers,
   getBoard,
   getBoards,
+  getActivity,
   getCard,
   getDirectory,
+  getMyCards,
   updateBoard,
   updateLabel,
   updateProfile,
@@ -40,6 +42,8 @@ vi.mock("@/lib/api", async () => {
     updateLabel: vi.fn(),
     deleteLabel: vi.fn(),
     getCard: vi.fn(),
+    getMyCards: vi.fn(),
+    getActivity: vi.fn(),
     addComment: vi.fn(),
     updateProfile: vi.fn(),
     createCard: vi.fn(),
@@ -84,6 +88,8 @@ beforeEach(() => {
   ]);
   vi.mocked(getAllUsers).mockResolvedValue([]);
   vi.mocked(getCard).mockResolvedValue(makeCardDetail());
+  vi.mocked(getMyCards).mockResolvedValue([]);
+  vi.mocked(getActivity).mockResolvedValue([]);
 });
 
 describe("Workspace boards", () => {
@@ -443,5 +449,91 @@ describe("Board labels", () => {
       within(dialog).queryByRole("button", { name: "Delete label Bug" })
     ).toBeNull();
     expect(within(dialog).getByLabelText("Name for Bug")).toBeDisabled();
+  });
+});
+
+describe("My work", () => {
+  const assignedCard = {
+    ...makeCardDetail({ id: "card-3", title: "Review the draft" }),
+    boardId: 2,
+    boardName: "Roadmap",
+    columnTitle: "Review",
+  };
+
+  it("switches to the assignment list and back to a board", async () => {
+    vi.mocked(getMyCards).mockResolvedValue([assignedCard]);
+    renderWorkspace();
+
+    await userEvent.click(await screen.findByTestId("my-work-link"));
+
+    expect(await screen.findByTestId("my-work")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "My work", level: 1 })
+    ).toBeInTheDocument();
+    expect(screen.getByText("1 assigned to you")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByTestId("board-option-1"));
+    expect(screen.queryByTestId("my-work")).toBeNull();
+  });
+
+  it("opens an assigned card on its own board", async () => {
+    vi.mocked(getMyCards).mockResolvedValue([assignedCard]);
+    renderWorkspace();
+    await userEvent.click(await screen.findByTestId("my-work-link"));
+
+    await userEvent.click(await screen.findByTestId("assigned-card-3"));
+
+    expect(getCard).toHaveBeenCalledWith(2, "card-3");
+    expect(getBoard).toHaveBeenCalledWith(2);
+    expect(screen.queryByTestId("my-work")).toBeNull();
+  });
+
+  it("hides the board tools while the assignment list is showing", async () => {
+    renderWorkspace();
+
+    await userEvent.click(await screen.findByTestId("my-work-link"));
+
+    expect(screen.queryByRole("button", { name: /board settings/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /board history/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Ask AI" })).toBeNull();
+  });
+
+  it("reports a failure to load assignments", async () => {
+    vi.mocked(getMyCards).mockRejectedValue(new ApiError(500, "Server exploded"));
+    renderWorkspace();
+
+    await userEvent.click(await screen.findByTestId("my-work-link"));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Server exploded");
+  });
+});
+
+describe("Board history", () => {
+  it("opens the activity dialog for the current board", async () => {
+    vi.mocked(getActivity).mockResolvedValue([
+      {
+        id: 1,
+        actorId: 1,
+        actorName: "Workspace Admin",
+        action: "board.created",
+        subject: "Kanban Studio",
+        detail: "",
+        cardId: null,
+        createdAt: "2026-06-15T09:30:00+00:00",
+      },
+    ]);
+    renderWorkspace();
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: /board history/i })
+    );
+
+    const dialog = await screen.findByRole("dialog", {
+      name: /history of kanban studio/i,
+    });
+    expect(within(dialog).getByTestId("activity-1")).toHaveTextContent(
+      "Workspace Admin created this board"
+    );
+    expect(getActivity).toHaveBeenCalledWith(1, { limit: 25, before: undefined });
   });
 });

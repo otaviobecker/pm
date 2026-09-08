@@ -212,3 +212,18 @@ export const ChevronUpIcon = (props: IconProps) => (
     <path d="M6 15l6-6 6 6" />
   </svg>
 );
+
+export const HistoryIcon = (props: IconProps) => (
+  <svg {...sized(props)}>
+    <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
+    <path d="M3 4v4h4" />
+    <path d="M12 8v4l3 2" />
+  </svg>
+);
+
+export const InboxIcon = (props: IconProps) => (
+  <svg {...sized(props)}>
+    <path d="M3 13h5l1.5 3h5L16 13h5" />
+    <path d="M4.6 5.4A2 2 0 0 1 6.4 4h11.2a2 2 0 0 1 1.8 1.4L21 13v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-5z" />
+  </svg>
+);

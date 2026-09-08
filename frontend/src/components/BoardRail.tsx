@@ -9,6 +9,7 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   CloseIcon,
+  InboxIcon,
   PlusIcon,
 } from "@/components/icons";
 import type { BoardSummary } from "@/lib/kanban";
@@ -17,6 +18,9 @@ type BoardRailProps = {
   boards: BoardSummary[];
   activeBoardId: number | null;
   showArchived: boolean;
+  /** True while the cross-board assignment list is showing instead of a board. */
+  showingMyWork: boolean;
+  onShowMyWork: () => void;
   onSelect: (boardId: number) => void;
   onToggleArchived: () => void;
   onCreate: (name: string) => Promise<boolean>;
@@ -26,6 +30,8 @@ export const BoardRail = ({
   boards,
   activeBoardId,
   showArchived,
+  showingMyWork,
+  onShowMyWork,
   onSelect,
   onToggleArchived,
   onCreate,
@@ -61,6 +67,18 @@ export const BoardRail = ({
           title="Show board list"
         >
           <ChevronRightIcon width={16} height={16} />
+        </button>
+        <button
+          type="button"
+          onClick={onShowMyWork}
+          className={clsx(
+            "icon-button",
+            showingMyWork && "bg-[var(--navy-dark)] text-white hover:text-white"
+          )}
+          aria-label="My work"
+          title="My work"
+        >
+          <InboxIcon width={16} height={16} />
         </button>
         {boards.map((board) => (
           <button
@@ -108,6 +126,22 @@ export const BoardRail = ({
       </div>
 
       <div className="scroll-slim min-h-0 flex-1 overflow-y-auto p-2">
+        <button
+          type="button"
+          onClick={onShowMyWork}
+          aria-current={showingMyWork ? "true" : undefined}
+          className={clsx(
+            "mb-2 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left font-display text-sm font-semibold transition",
+            showingMyWork
+              ? "bg-[var(--secondary-purple)] text-white"
+              : "text-[var(--navy-dark)] hover:bg-[var(--surface-muted)]"
+          )}
+          data-testid="my-work-link"
+        >
+          <InboxIcon width={15} height={15} />
+          My work
+        </button>
+
         {boards.length === 0 ? (
           <p className="px-2 py-4 text-xs leading-5 text-[var(--gray-text)]">
             {showArchived

@@ -10,20 +10,23 @@ const boards = [
   makeSummary({ id: 2, name: "Roadmap", cardCount: 1, archived: true }),
 ];
 
-const renderRail = (onCreate = vi.fn(async () => true)) => {
+const renderRail = (onCreate = vi.fn(async () => true), showingMyWork = false) => {
   const onSelect = vi.fn();
   const onToggleArchived = vi.fn();
+  const onShowMyWork = vi.fn();
   render(
     <BoardRail
       boards={boards}
       activeBoardId={1}
       showArchived={false}
+      showingMyWork={showingMyWork}
+      onShowMyWork={onShowMyWork}
       onSelect={onSelect}
       onToggleArchived={onToggleArchived}
       onCreate={onCreate}
     />
   );
-  return { onSelect, onToggleArchived, onCreate };
+  return { onSelect, onToggleArchived, onCreate, onShowMyWork };
 };
 
 describe("BoardRail", () => {
@@ -100,12 +103,34 @@ describe("BoardRail", () => {
     expect(screen.getByTestId("board-rail")).toBeInTheDocument();
   });
 
+  it("opens the assignment list from the rail and from the collapsed rail", async () => {
+    const { onShowMyWork } = renderRail();
+
+    await userEvent.click(screen.getByTestId("my-work-link"));
+    expect(onShowMyWork).toHaveBeenCalledOnce();
+
+    await userEvent.click(screen.getByRole("button", { name: /hide board list/i }));
+    await userEvent.click(screen.getByRole("button", { name: "My work" }));
+    expect(onShowMyWork).toHaveBeenCalledTimes(2);
+  });
+
+  it("marks the assignment list as current while it is showing", () => {
+    renderRail(vi.fn(async () => true), true);
+
+    expect(screen.getByTestId("my-work-link")).toHaveAttribute(
+      "aria-current",
+      "true"
+    );
+  });
+
   it("explains an empty list", () => {
     render(
       <BoardRail
         boards={[]}
         activeBoardId={null}
         showArchived={false}
+        showingMyWork={false}
+        onShowMyWork={vi.fn()}
         onSelect={vi.fn()}
         onToggleArchived={vi.fn()}
         onCreate={vi.fn(async () => true)}

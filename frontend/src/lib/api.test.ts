@@ -31,7 +31,9 @@ import {
   deleteComment,
   deleteLabel,
   editComment,
+  getActivity,
   getCard,
+  getMyCards,
   moveChecklistItem,
   setCardLabels,
   updateChecklistItem,
@@ -356,5 +358,22 @@ describe("endpoint shapes", () => {
       "/api/boards/1/cards/card-1/checklist/4",
       "DELETE",
     ]);
+  });
+
+  it("builds the activity and assignment requests", async () => {
+    const spy = stubFetch(respond([]));
+    const url = () => lastCall(spy)[0];
+
+    await getActivity(1);
+    expect(url()).toBe("/api/boards/1/activity");
+
+    await getActivity(1, { limit: 25 });
+    expect(url()).toBe("/api/boards/1/activity?limit=25");
+
+    await getActivity(1, { limit: 25, before: 40 });
+    expect(url()).toBe("/api/boards/1/activity?limit=25&before=40");
+
+    await getMyCards();
+    expect(url()).toBe("/api/users/me/cards");
   });
 });

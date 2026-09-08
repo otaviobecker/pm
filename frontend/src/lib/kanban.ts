@@ -39,6 +39,23 @@ export type ChecklistItem = {
   done: boolean;
 };
 
+export type ActivityEntry = {
+  id: number;
+  actorId: number | null;
+  actorName: string;
+  action: string;
+  subject: string;
+  detail: string;
+  cardId: string | null;
+  createdAt: string;
+};
+
+export type AssignedCard = Card & {
+  boardId: number;
+  boardName: string;
+  columnTitle: string;
+};
+
 export type CardDetail = Card & {
   boardId: number;
   columnId: string;
@@ -254,3 +271,68 @@ export const labelsFor = (board: BoardData, card: Card): Label[] =>
   card.labelIds
     .map((labelId) => board.labels.find((label) => label.id === labelId))
     .filter((label): label is Label => label !== undefined);
+
+/** How each recorded action reads in the activity feed, before its subject. */
+export const activityPhrases: Record<string, string> = {
+  "board.created": "created this board",
+  "board.renamed": "renamed the board to",
+  "board.archived": "archived",
+  "board.restored": "restored",
+  "member.added": "added",
+  "member.role_changed": "changed the role of",
+  "member.removed": "removed",
+  "column.created": "added the column",
+  "column.renamed": "renamed a column to",
+  "column.moved": "moved the column",
+  "column.deleted": "deleted the column",
+  "column.wip_limit": "set the WIP limit on",
+  "label.created": "added the label",
+  "label.deleted": "deleted the label",
+  "card.created": "added",
+  "card.updated": "edited",
+  "card.moved": "moved",
+  "card.deleted": "deleted",
+  "card.labeled": "relabelled",
+  "comment.added": "commented on",
+  "checklist.completed": "ticked an item on",
+  "assistant.updated": "asked the assistant to change the board",
+};
+
+export const describeActivity = (entry: ActivityEntry) =>
+  activityPhrases[entry.action] ?? entry.action;
+
+/** Buckets for the cross-board assignment list, in the order they are shown. */
+export const workGroups = ["overdue", "today", "soon", "later", "none"] as const;
+
+export type WorkGroup = (typeof workGroups)[number];
+
+export const workGroupLabels: Record<WorkGroup, string> = {
+  overdue: "Overdue",
+  today: "Due today",
+  soon: "Due soon",
+  later: "Later",
+  none: "No due date",
+};
+
+export const groupAssignments = (
+  cards: AssignedCard[],
+  today = new Date()
+): [WorkGroup, AssignedCard[]][] => {
+  const grouped = new Map<WorkGroup, AssignedCard[]>();
+  cards.forEach((card) => {
+    const group = dueState(card.dueDate, today) as WorkGroup;
+    grouped.set(group, [...(grouped.get(group) ?? []), card]);
+  });
+  return workGroups
+    .filter((group) => (grouped.get(group) ?? []).length > 0)
+    .map((group) => [group, grouped.get(group) ?? []]);
+};
+
+/** A short, stable rendering of a stored timestamp. */
+export const formatMoment = (timestamp: string) =>
+  new Date(timestamp).toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });

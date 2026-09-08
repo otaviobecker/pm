@@ -353,13 +353,41 @@ deployment, and session-only chat history.
 - An existing version 2 database keeps its data and gains the default labels.
 - Backend statement coverage stays at 100 percent and all suites pass.
 
+## Part 13: Show who changed what, and what is mine
+
+### Implementation
+
+- [x] Add schema version 4 with `board_activity`, upgrading existing databases in place; their boards start with an empty history.
+- [x] Record an entry for every board, member, column, label, card, comment, checklist, and assistant change, written inside the same transaction as the change itself.
+- [x] Denormalize the actor's display name onto the entry so history survives an account being renamed or removed.
+- [x] Cap each board at a rolling 400 entries rather than letting history grow without bound.
+- [x] Leave a pure reorder within a column unrecorded, so the feed stays about intent rather than every drag.
+- [x] Serve the feed from `GET /api/boards/{id}/activity`, newest first, paged with `limit` and `before`.
+- [x] Answer `GET /api/users/me/cards` with every card assigned to the caller across every board they can open, due cards first and undated ones last, each carrying its board, column, labels, and rollups.
+- [x] Add a board history dialog, paged 25 at a time, opened from the board header.
+- [x] Add a cross-board "my work" view grouped into overdue, today, soon, later, and undated, opening any card on its own board.
+
+### Tests
+
+- [x] Cover an entry for each recorded action, the actor name snapshot, the rolling cap, and paging by `before`.
+- [x] Cover that history outlives the card it describes and the account that made it, and dies with its board.
+- [x] Cover that history is readable by every board role and invisible to non-members.
+- [x] Cover that assignments span boards, exclude other people's cards, and drop when a board is archived, access is lost, or the card is unassigned.
+- [x] Cover the version 3 to version 4 migration against a database built with the old schema.
+- [x] Add unit tests for the history dialog, the grouping helpers, and the my-work view.
+- [x] Add browser tests for recorded history and for collecting assigned cards across boards.
+
+### Success criteria
+
+- Every change to a board is attributable to an account and a moment.
+- A signed-in user can see all of their work without opening each board.
+- An existing version 3 database keeps its data and starts recording history.
+- Backend statement coverage stays at 100 percent and all suites pass.
+
 ## Next candidates
 
 Not started, in rough order of value to the product:
 
-- A per-board activity feed recording who changed what.
-- A cross-board "my work" view of everything assigned to the signed-in user,
-  with an overdue and due-soon grouping.
 - Board templates, so a new board can start from a saved column and label set.
 - Card attachments or links.
 - Keyboard navigation across the board, and a command palette.
